@@ -18,6 +18,8 @@ install:
 	make $B/error.sh
 	make $B/procmap.sh
 	make $B/conf.sh
+	make $B/norms.sh
+	make $B/setup.sh
 	if git status >/dev/null 2>&1; then \
 		grep -q $(shell git log -1 --pretty=format:%h 2>/dev/null) $P/version || \
 			git log -1 --oneline >> $P/version; \
@@ -25,7 +27,8 @@ install:
 
 diags:
 	mkdir -p $P
-	cp -pruv diag.R spnorm.R error.R procmap.R $P
+	cp -pruv diag.R spnorm.R spnorm1.R gpnorm.R norms.R error.R procmap.R setup.html \
+		img.html norms.html $P
 
 $B/epy_dump.py: epy_dump.py
 	cp -uv epy_dump.py $B
@@ -49,3 +52,11 @@ $B/procmap.sh: procmap.sh
 $B/conf.sh: conf.sh
 	sed -re "s:diags=.+:diags=$P:" conf.sh > $B/conf.sh
 	chmod a+x $B/conf.sh
+
+$B/norms.sh: norms.sh
+	sed -re "s:diags=.+:diags=$P:" norms.sh > $B/norms.sh
+	chmod a+x $B/norms.sh
+
+$B/setup.sh: setup.sh
+	sed -re "s:diags=.+:diags=$P:" setup.sh > $B/setup.sh
+	chmod a+x $B/setup.sh

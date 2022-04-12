@@ -50,7 +50,7 @@ type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
 
 nf=$(echo $args | tr ' ' '\n' | grep -v '=' | wc -l | awk '{print $1}')
 if [ $nf -eq 1 ] && ! echo $args | grep -qE '\<(time|nmax)='
-	R --slave -f $diags/spnorm1.R --args $*
+	R --slave -f $diags/norms.R --args plot=sp $*
 else
 	R --slave -f $diags/spnorm.R --args $*
 fi

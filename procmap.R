@@ -1,7 +1,10 @@
+Gnum = "-?[0-9]*\\.[0-9]+([eE]?[-+]?[0-9]+)?\\>"
+Gint = "-?[0-9]+\\>"
+
 getvar = function(var,nd,sep="=")
 {
-	re = sprintf("^ *\\<%s *%s *(\\d+).*",var,sep)
-	unique(as.integer(gsub(re,"\\1",grep(re,nd,value=TRUE))))
+	re = sprintf("^ *\\<%s *%s *(%s|%s).*",var,sep,Gint,Gnum)
+	unique(as.numeric(gsub(re,"\\1",grep(re,nd,value=TRUE))))
 }
 
 longend = function(nd,ndglg)
@@ -10,19 +13,95 @@ longend = function(nd,ndglg)
 	is = grep("Set up transforms",nd)
 
 	ind = seq(ij+1,is-1)
-	s = unlist(regmatches(nd[ind],gregexpr("\\( *\\-?\\d+ +\\d+\\)",nd[ind])))
-	nloeng = as.integer(gsub("\\( *\\-?\\d+ +(\\d+)\\)","\\1",s))
-   stopifnot(length(nloeng)%/%2 == (length(nloeng)+1)%/%2)
+	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
+	nloeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
+   stopifnot(length(nloeng)%%2 == 0)
 
    off = (length(nloeng)-ndglg)/2
 	nloeng[off+seq(ndglg%/%2)]
 }
 
-stdatm = function(nd,nlev)
+intlines = function(nd)
+{
+	as.integer(unlist(regmatches(nd,gregexpr(Gint,nd))))
+}
+
+numlines = function(nd)
+{
+	as.numeric(unlist(regmatches(nd,gregexpr(Gnum,nd))))
+}
+
+spec = function(nd,ndglg)
+{
+	i1 = grep("^ *NUMPP\\>",nd)
+	i2 = grep("NUMBER OF THREADS",nd)
+	ind = seq(i1+1,i2-1)
+	numpp = intlines(nd[ind])
+
+	i1 = grep("^ *NPROCM",nd)
+	i2 = grep("^ *NFRSTLAT",nd)
+	ind = seq(i1+1,i2-1)
+	nprocm = intlines(nd[ind])
+
+	i1 = grep("^ *NALLMS",nd)
+	i2 = grep("^ *NPTRMS",nd)
+	ind = seq(i1+1,i2-1)
+	nallms = intlines(nd[ind])
+
+	i1 = grep("^ *MYLEVS",nd)
+	i2 = grep("^ *NUMLL *$",nd)
+	ind = seq(i1+1,i2-1)
+	mylevs = intlines(nd[ind])
+
+	i1 = grep("^ *NBSETLEV",nd)
+	i2 = grep("^ *MYLATS",nd)
+	ind = seq(i1+1,i2-1)
+	nbsetlev = intlines(nd[ind])
+
+	i1 = grep("^ *YDLAP%MYMS",nd)
+	i2 = grep("^ *NASM0 *$",nd)
+	ind = seq(i1+1,i2-1)
+	myms = intlines(nd[ind])
+
+	ij = grep("\\( *JGL,NMENG *\\)",nd)
+	is = grep("\\( *JM,NDGLU *\\)",nd)
+	ind = seq(ij+1,is-1)
+	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
+	nmeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
+	off = (length(nmeng)-ndglg)/2
+	nmeng = nmeng[off+seq(ndglg%/%2)]
+
+	ij = grep("\\( *JM,NDGLU *\\)",nd)
+	is = grep("Set up distributed",nd)
+	ind = seq(ij+1,is-1)
+	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
+	ndglu = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
+
+	i1 = grep("^ *\\(JGL,NLOEN,NMEN\\)",nd)
+	i2 = grep("^ *ARRAY +NSTAGP +ALLOCATED",nd)
+	ind = seq(i1+1,i2-1)
+	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
+	nmen = as.integer(gsub("\\( *\\d+ +\\d+ +(\\d+)\\)","\\1",s))
+
+	i1 = grep("^ *EIGEN-VALUES OF THE LAPLACIAN",nd)
+	i2 = grep("^ *EIGEN-VALUES OF ITS INVERSE",nd)
+	i3 = grep("^ *YDLAP%NASM0G",nd)
+	ind = seq(i1+1,i2-1)
+	rlapdi = numlines(nd[ind])
+
+	ind = seq(i2+1,i3-1)
+	rlapin = numlines(nd[ind])
+
+	list(numpp=numpp,nprocm=nprocm,nallms=nallms,mylevs=mylevs,nbsetlev=nbsetlev,myms=myms,
+		nmeng=nmeng,ndglu=ndglu,nmen=nmen,rlapdi=rlapdi,rlapin=rlapin)
+}
+
+stdatm = function(nd,nflevg)
 {
 	ia = grep(" +pressure +temperature +height +density",nd,ignore.case=TRUE)
-	ind = ia+seq(nlev)
-	ire = regexec(" *\\d+ +(\\d+\\.\\d+) +(\\d+\\.\\d+) +(\\d+\\.\\d+) +(\\-?\\d+\\.\\d+)",nd[ind])
+	ind = ia+seq(nflevg)
+	snum = "-?\\d+\\.\\d+"
+	ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s) +(%s)",snum,snum,snum,snum),nd[ind])
 	P = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
 	T = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
 	Z = as.numeric(sapply(regmatches(nd[ind],ire),"[",4))
@@ -31,25 +110,70 @@ stdatm = function(nd,nlev)
 	data.frame(P=P,T=T,Z=Z,rho=rho)
 }
 
-abh = function(nd,nlev)
+abh = function(nd,nflevg)
 {
 	ih = grep("A and B at half levels",nd)
-	ind = ih+1+seq(nlev+1)
-	ire = regexec(" *\\d+ +(\\d+\\.\\d+) +(\\-?\\d+\\.\\d+) +(\\-?\\d+\\.\\d+)",nd[ind])
+	ind = ih+1+seq(nflevg+1)
+	snum = "-?\\d+\\.\\d+"
+	ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s)",snum,snum,snum),nd[ind])
 	alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
 	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
 	ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",4))
-
 	data.frame(Ah=ah,Bh=bh,alpha=alh)
+}
+
+silev = function(nd)
+{
+	il = grep("JLEV *= \\d+ +SITLAF *=",nd)
+	ire = regexec(sprintf(" *\\d+ +SITLAF += +(%s) +SIDPHI += +(%s)",Gnum,Gnum),nd[il])
+	sitlaf = as.numeric(sapply(regmatches(nd[il],ire),"[",2))
+	sidphi = as.numeric(sapply(regmatches(nd[il],ire),"[",4))
+
+	i1 = grep("KNSHD *:",nd)
+	i2 = grep("^ *SUHDF",nd)
+	il = seq(i1+1,i2-1)
+	knshd = intlines(nd[il])
+
+	i1 = grep("PDILEV",nd)
+	i2 = grep("SUHDVPN",nd)
+	il = seq(i1+1,i2-1)
+	pdi = numlines(nd[il])
+
+	i1 = grep("SURCORDI",nd)
+	i2 = grep("Set up relaxation",nd,ignore.case=TRUE)
+	ind = seq(i1+1,i2-1)
+	ic = grep("RCORDI",nd[ind])
+	noms = sub("^ *(RCORDI\\w+).*","\\1",nd[ind[ic]])
+	stopifnot(all(noms == sprintf("RCORDI%s",c("T","H","F"))))
+
+	il = ind[seq(ic[1]+1,ic[2]-1)]
+	rcordit = numlines(nd[il])
+	il = ind[seq(ic[2]+1,ic[3]-1)]
+	rcordih = numlines(nd[il])[-1]
+	il = ind[-(1:ic[3])]
+	rcordif = numlines(nd[il])
+
+	data.frame(sitlaf=sitlaf,sidphi=sidphi,pdi=pdi,knshd=knshd,rcordit=rcordit,
+		rcordif=rcordif,rcordih=rcordih)
+}
+
+cuico = function(nd,nflevg)
+{
+	ind = grep("JLEV +VCUICO\\>(\\(1)?",nd)
+	indi = ind+seq(nflevg-3)
+	snum = "-?\\d+\\.\\d+"
+	ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s) +(%s)",snum,snum,snum,snum),nd[indi])
+	vintw = matrix(as.numeric(sapply(regmatches(nd[indi],ire),"[",2:5)),nrow=4)
+	t(vintw)
 }
 
 getgem = function(nd)
 {
 	ig = grep("Printings in SUGEM_NAML",nd,ignore.case=TRUE)
-	mucen = as.numeric(sub(".* RMUCEN *= *(\\-?\\d+\\.[-+0-9eE]+).*","\\1",nd[ig+1]))
-	locen = as.numeric(sub(".* RLOCEN *= *(\\-?\\d+\\.[-+0-9eE]+).*","\\1",nd[ig+1]))
-	stret = as.numeric(sub(".* RSTRET *= *(\\-?\\d+\\.[-+0-9eE]+).*","\\1",nd[ig+1]))
-	nlginc = as.numeric(sub(".* RNLGINC *= *(\\-?\\d+\\.[-+0-9eE]+).*","\\1",nd[ig+3]))
+	mucen = as.numeric(sub(sprintf(".* RMUCEN *= *(%s).*",Gnum),"\\1",nd[ig+1]))
+	locen = as.numeric(sub(sprintf(".* RLOCEN *= *(%s).*",Gnum),"\\1",nd[ig+1]))
+	stret = as.numeric(sub(sprintf(".* RSTRET *= *(%s).*",Gnum),"\\1",nd[ig+1]))
+	nlginc = as.numeric(sub(sprintf(".* RNLGINC *= *(%s).*",Gnum),"\\1",nd[ig+3]))
 
 	list(mucen=mucen,locen=locen,stret=stret,nlginc=nlginc)
 }
@@ -158,29 +282,35 @@ runtime = function(nd)
 	rt
 }
 
-equilon = function(ndgnh,ndlon)
+equilon = function(ndgnh,ndlon,nadd=0)
 {
 	lats = 90*(1-(seq(ndgnh)-.5)/ndgnh)
+	if (nadd > 0) {
+		nlat = ndgnh+nadd
+		lats2 = 90*(1-(seq(nlat)-.5)/nlat)
+		lats = lats2[-(1:nadd)]
+	}
+
 	round(ndlon*cos(pi/180*lats))
 }
 
 plotnlon = function(nlong,nlon90,nlon45)
 {
-   lty = c(1,2,2)
    nlat = length(nlong)
+   titre = c("Nb of grid-points per Gaussian latitude",
+      sprintf("actual grid + equilong curves - #lat: %d",nlat))
+	matplot(data.frame(nlong,nlon90,nlon45),type="l",lty=1:3,col=1:3,
+		xlab="Latitude index",ylab="Nb of points",main=titre)
+	tt = paste(c("actual grid","equi0","equi45"),c(sum(nlong),sum(nlon90),sum(nlon45)))
+	legend("topleft",tt,lty=1:3,col=1:3)
+	il = c(1,nlat)
+   text(il,nlong[il],nlong[il],pos=3,cex=.8)
+   text(il,nlon45[il],nlon45[il],pos=3,cex=.8,offset=0.2,col=3)
+   text(1,nlon90[1],nlon90[1],pos=3,cex=.8,offset=0.2,col=2)
 	dlon = abs(nlong-nlon90)
 	ix = which.max(dlon)
-   titre = c("Nb of grid-points per Gaussian latitude",
-      sprintf("nlat: %d - max diff from equi0: %d",nlat,dlon[ix]))
-	matplot(data.frame(nlong,nlon90,nlon45),type="l",lty=lty,col=1,
-		xlab="Latitude index",ylab="Nb of points",main=titre)
-	legend("topleft",c("actual grid def","equi0","equi45"),lty=lty)
-   text(c(1,nlat/2,nlat),nlong[c(1,nlat/2,nlat)],nlong[c(1,nlat/2,nlat)],pos=3,cex=.75)
-   text(nlat,nlon45[nlat],nlon45[nlat],pos=3,cex=.75,offset=0.2)
-	text(ix,nlong[ix],sprintf("diff: %d",dlon[ix]),pos=3,cex=.75)
-	#ind = which(nlon-nlon90 != 0)
-	#x = seq(along=nlon)
-	#arrows(x[ind],nlon[ind],x[ind],nlon90[ind],.1,90)
+	text(ix,nlong[ix],sprintf("diff max: %+d",dlon[ix]),pos=3,cex=.9)
+	arrows(ix,nlong[ix],ix,nlon90[ix],.05,90,3)
 }
 
 dumpGem = function(con,gem,nsmax,nsttyp,nhtyp)
@@ -210,6 +340,9 @@ dumpAB = function(con,ab)
 args = commandArgs(TRUE)
 if (length(args) == 0) args = "NODE.001_01"
 
+hasx11 = length(grep("png",args)) == 0 && capabilities("X11")
+if (! hasx11) cat("--> no X11 device, sending plots to PNG files\n")
+
 nd = readLines(args[1])
 
 nproc = getvar("NPROC",nd)
@@ -228,11 +361,8 @@ nmsmax= getvar("NMSMAX",nd)
 nsttyp = getvar("NSTTYP",nd)
 nhtyp = getvar("NHTYP",nd)
 
-nlev = getvar("NFLEVG",nd)
-itropo = getvar("SUSTA: CLOSEST FULL LEVEL",nd,":")
-ab = abh(nd,nlev)
-std = stdatm(nd,nlev)
-itropt = which(std$T == std$T[itropo-1])[1]
+nflevg = getvar("NFLEVG",nd)
+ab = abh(nd,nflevg)
 
 eta = ab$alpha+ab$Bh
 
@@ -250,20 +380,36 @@ ind = grep("[&*/\\] *nam\\w+",nfp,invert=TRUE,ignore.case=TRUE)
 nfp[ind] = sub("([.0-9]) *$","\\1,",nfp[ind])
 writeLines(nfp,"fp.txt")
 
-hasx11 = capabilities("X11")
-if (! hasx11) cat("--> no X11 device, sending plots to PNG files\n")
+std = stdatm(nd,nflevg)
+itropo = getvar("SUSTA: CLOSEST FULL LEVEL",nd,":")
+itropt = which(std$T == std$T[itropo-1])[1]
 
-if (! hasx11) png("levels.png")
-tt = c("Vertical levels in hybrid coordinate",
-	sprintf("%d levels - tropopause: ~%d-%d",nlev,itropt,itropo))
+if (! hasx11) png("levels1.png")
+tt = c("Vertical hybrid coordinate",
+	sprintf("%d levels - tropopause: ~%d-%d",nflevg,itropt,itropo))
 matplot(cbind(ab[c("Bh","alpha")],eta=eta),type="o",lty=1,pch="|",main=tt,
 	xlab="Level",ylab=expression(eta))
 legend("topleft",c("Bh","Ah/Pref",expression(eta)),lty=1,pch="|",col=1:3,inset=.01)
+abline(h=0,col="darkgrey")
 if (hasx11 && interactive()) invisible(readline("Press enter to continue"))
-invisible(dev.off())
+
+if (! hasx11) png("levels.png")
+op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+ss = "Layer interfaces"
+ylim = c(nflevg,0)
+plot(eta,0:nflevg,type="o",lty=1,pch="-",main=c("Hybrid coordinate",ss),
+	xlab=expression(eta),ylab="Level",ylim=ylim,cex=1.5,yaxs="i")
+abline(h=c(itropt,itropo),lty=2)
+plot(ab$Bh,0:nflevg,type="o",lty=1,pch="-",main=c("Coefficient B",ss),
+	xlab="Coef B",ylab="Level",ylim=ylim,cex=1.5,yaxs="i")
+abline(h=c(itropt,itropo),lty=2)
+plot(ab$Ah,0:nflevg,type="o",lty=1,pch="-",main=c("Coefficient A/Pref",ss),
+	xlab="alpha (=A/Pref)",ylab="Level",ylim=ylim,cex=1.5,yaxs="i")
+abline(h=c(itropt,itropo),lty=2)
+if (hasx11 && interactive()) invisible(readline("Press enter to continue"))
 
 if (! hasx11) png("stdatm.png")
-par(mfrow=c(1,3))
+op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 ttstd = "Standard atmosphere"
 plot(std$P/100,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Pressure"),
 	xlab="Pressure (hPa)",ylab="Z (mgp)",cex=1.5)
@@ -271,24 +417,101 @@ abline(h=c(0,std$Z[c(itropt,itropo)]),lty=2)
 plot(std$T-273.15,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Temperature (°C)"),
 	xlab="Temperature",ylab="Z (mgp)",cex=1.5)
 abline(h=c(0,std$Z[c(itropt,itropo)]),lty=2)
+abline(v=0,lty=1)
 plot(std$rho,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Density of air"),
 	xlab="Density (-)",ylab="Z (mgp)",cex=1.5)
 abline(h=c(0,std$Z[c(itropt,itropo)]),lty=2)
+par(op)
 if (hasx11 && interactive()) invisible(readline("Press enter to continue"))
-invisible(dev.off())
+
+si = silev(nd)
+
+if (! hasx11) png("sihd.png")
+op = par(mfrow=c(2,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+ylim = c(nflevg,1)
+plot(si$sitlaf/100,1:nflevg,type="o",lty=1,pch="-",main="SITLAF: pressure",
+	xlab="Pressure (hPa)",ylab="Level",ylim=ylim,cex=1.5)
+plot(si$sidphi,1:nflevg,type="o",lty=1,pch="-",main="SIDPHI: diff. of geopotential",
+	xlab="Geopotential",ylab="Level",ylim=ylim,cex=1.5)
+plot(si$pdi/100,1:nflevg,type="o",lty=1,pch="-",main="PDILEV: 1+7.5*(3-log10(P))",
+	xlab="PDILEV (hPa)",ylab="Level",ylim=ylim,cex=1.5)
+plot(si$knshd,1:nflevg,type="o",lty=1,pch="-",main="KNSHD",
+	xlab="KNSHD",ylab="Level",ylim=ylim,cex=1.5)
+plot(si$rcordit,1:nflevg,type="o",lty=1,pch="-",main="RCORDIT",
+	xlab="RCORDIT",ylab="Level",ylim=ylim,cex=1.5)
+plot(si$rcordif,1:nflevg,type="o",lty=1,pch="-",main="RCORDIF",
+	xlab="RCORDIF",ylab="Level",ylim=ylim,cex=1.5)
+par(op)
+if (hasx11 && interactive()) invisible(readline("Press enter to continue"))
+
+nprtrw = getvar("NPRTRW",nd)
+nprtrn = getvar("NPRTRN",nd)
+nprtrns = getvar("NPRTRNS",nd)
+nprtrv = getvar("NPRTRV",nd)
+
+sp = spec(nd,ndglg)
+nm = length(sp$ndglu)-1
+
+if (! hasx11) png("specgp.png")
+op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+ss = sprintf("nmeng: %d... %d",min(sp$nmeng),max(sp$nmeng))
+plot(sp$nmeng,type="h",main=c("Wave cut-off per latitude",ss),xlab="Latitude index",
+	ylab="Nb of waves",xaxt="n")
+axis(1,pretty(seq(along=sp$nmeng)/8,8)*8)
+ss = sprintf("ndglu: %d... %d",min(sp$ndglu),max(sp$ndglu))
+plot(0:nm,sp$ndglu,type="h",main=c("Nb of longitudes per wave",ss),
+	xlab="Wave index 'jm'",ylab="Nb of longitudes",xaxt="n")
+axis(1,pretty((seq(along=sp$ndglu)-1)/8,8)*8)
+par(op)
+if (hasx11 && interactive()) invisible(readline("Press enter to continue"))
+
+if (! hasx11) png("specproc.png")
+op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+pr = unlist(lapply(seq(along=sp$numpp),function(i) rep(i,each=sp$numpp[i])))
+plot(0:nm,sp$nprocm,type="h",main=c("W-set and waves","'nprocm'"),xlab="Wave index 'jm'",
+	ylab="W-set index")
+plot(sp$nallms,type="h",main=c("Waves and W-set","'nallms'"),
+	xlab="W-set index (nb of waves 'numpp')",ylab="Wave index 'jm'",lwd=1.5,
+	col=(pr-1)%%8+1,xaxt="n")
+x = cumsum(sp$numpp)
+axis(1,c(x[1]/2,(x[-1]+x[-length(x)])/2),sprintf("%d (%d)",seq(sp$numpp),sp$numpp))
+par(op)
+if (hasx11 && interactive()) invisible(readline("Press enter to continue"))
+
+vintw = cuico(nd,nflevg)
+
+if (! hasx11) png("vintw.png")
+op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+nl3 = nflevg-3
+ntop = min(nl3,5)
+nmid = max(ntop,1+nl3/2)
+matplot(abs(vintw[,2:4]),1:nl3,type="o",lty=1,pch="-",
+	main=c("Cubic weight for vert. interp.","x=log(abs(w))"),xlab="Weight",ylab="Level",
+	ylim=c(nl3,1),log="x")
+legend("bottomright",sprintf("w(,%d)",2:4),lty=1,col=1:3)
+matplot(abs(vintw[1:ntop,2:4]),1:ntop,type="o",lty=1,pch="-",
+	main=c("Weight at top levels","x=abs(w)"),xlab="Weight",ylab="Level",ylim=c(ntop,1))
+matplot(abs(vintw[ntop:nmid,2:4]),ntop:nmid,type="o",lty=1,pch="-",
+	main=c("Weight at mid levels","x=abs(w)"),xlab="Weight",ylab="Level",
+	ylim=c(nmid,ntop))
+matplot(abs(vintw[nmid:nl3,2:4]),nmid:nl3,type="o",lty=1,pch="-",
+	main=c("Weight at bottom","x=abs(w)"),xlab="Weight",ylab="Level",ylim=c(nl3,nmid))
+par(op)
+if (hasx11 && interactive()) invisible(readline("Press enter to continue"))
 
 if (length(unique(nlong)) == 1) {
 	cat("--> regular Gaussian grid\n")
 } else {
-	stopifnot(ndglg%/%2 == (ndglg+1)%/%2)
-	nlon90 = equilon(ndgnh,ndlon)
+	stopifnot(ndglg%%2 == 0)
+	nlon90 = equilon(ndgnh,ndlon,1)
 	n45 = nlong[length(nlong)%/%2]
-	nlon45 = equilon(ndgnh,n45*sqrt(2))
+	nlon45 = equilon(ndgnh,n45*sqrt(2),1)
 
 	if (! hasx11) png("ndlon.png")
+	cat(par("mfrow"),"\n")
+	par(mfrow=c(1,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	plotnlon(nlong,nlon90,nlon45)
 	if (hasx11 && interactive()) invisible(readline("Press enter to continue"))
-	invisible(dev.off())
 }
 
 cat("Grid-point mapping wrt MPI tasks\n")
@@ -300,7 +523,6 @@ onl = procmap(s)
 if (! hasx11) png("procmap.png")
 ncomp = plotmap(sta,onl)
 if (hasx11 && interactive()) invisible(readline("Press enter to continue"))
-invisible(dev.off())
 
 ngp = min(ngptot)
 ndim = c(nproc,nprgpns,ndglg,ndlon,min(ngptot),max(ngptot))
@@ -312,31 +534,65 @@ if (any(regexpr("LSLAG *= *T(RUE)?",nd) > 0)) {
 	nslrpt = getvar("SLRSET: +NSLRPT",nd)
 	nslspt = getvar("SLRSET: +NSLSPT",nd)
 	islwide = getvar("ISLWIDE",nd)
-	cat("SL halo/total sizes:",nslspt,"/",nslrpt,"(send/recv) +",ngp,"+ pad =",naslb1,"\n")
+	cat("SL halo comms (send/recv):",nslspt,"/",nslrpt,"points\n")
+	cat("SL total size (naslb1):",naslb1,"points\n")
 	cat("SL halo width:",islwide,"lats and longs\n")
 	cat("Core ratio in SL:",round(ngp/naslb1,3)*100,"%\n")
 	isl = grep("NSLCOMM",nd,ignore.case=TRUE)
 	icomm = as.integer(strsplit(gsub("^ +","",nd[isl+1])," +")[[1]])
 	ip = grep("MYPROC",nd,ignore.case=TRUE)
-	cat("SLCOMM for MPI task",sub(" *MYPROC += +(\\d+).*","\\1",nd[ip[1]]),":",icomm,"\n")
+	cat("SL comms for MPI task",sub(" *MYPROC += +(\\d+).*","\\1",nd[ip[1]]),":",icomm,"\n")
 }
 
 cat("Run-time information\n")
+nstop = getvar("NSTOP",nd)
+tstep = getvar("TSTEP",nd)
 tt = runtime(nd)
-if (is.null(tt)) stop("no time-steps")
+if (! is.null(tt)) {
+	nts = dim(tt)[1]
 
-nts = dim(tt)[1]
+	t0 = as.numeric(tt$wall[1]-attr(tt,"start"),units="secs") %% 86400
+	tint = as.numeric(tt$wall[nts]-tt$wall[1],units="secs") %% 86400
+	total = as.numeric(tt$wall[nts]-attr(tt,"start"),units="secs") %% 86400
+	sstt = sprintf("setup+step0, forecast, total: %gs, %gs, %gs",t0,tint,total)
+	cat(sstt,"\n")
 
-t0 = as.numeric(tt$wall[1]-attr(tt,"start"),units="secs") %% 86400
-tint = as.numeric(tt$wall[nts]-tt$wall[1],units="secs") %% 86400
-total = as.numeric(tt$wall[nts]-attr(tt,"start"),units="secs") %% 86400
-sstt = sprintf("setup+step0, forecast, total: %gs, %gs, %gs",t0,tint,total)
-cat(sstt,"\n")
+	if (! hasx11) png("runtime.png")
+	if (nts > 4000) {
+		pas = 50
+	} else if (nts > 2000) {
+		pas = 40
+	} else if (nts > 1000) {
+		pas = 20
+	} else if (nts > 500) {
+		pas = 10
+	} else if (nts > 200) {
+		pas = 5
+	} else if (nts > 100) {
+		pas = 2
+	} else {
+		pas = 1
+	}
 
-if (! hasx11) png("runtime.png")
-par(mfrow=c(2,1))
-its = seq(nts)-1
-plot(its,tt$dwall,type="h",main=c("Wall-time",sstt),xlab="Time-step",ylab="Time (s)")
-plot(its,tt$cpu,type="h",main="CPU-time",xlab="Time-step",ylab="Time (s)")
-if (hasx11 && interactive()) invisible(readline("Press enter to continue"))
-invisible(dev.off())
+	op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	its = seq(1,nts,by=pas)
+	plot(its-1,tt$dwall[its],type="h",main=c("Wall-time",sstt),xlab="Time-step",
+		ylab="Time (s)")
+	plot(its-1,tt$cpu[its],type="h",main="CPU-time",xlab="Time-step",ylab="Time (s)")
+	par(op)
+	if (hasx11 && interactive()) invisible(readline("Press enter to continue"))
+}
+
+if (nsttyp == 2) {
+	cat("--> tilted grid\n")
+	if (! hasx11) png("pole.png")
+	library(maps)
+	xp = 180/pi*gem$locen
+	yp = 180/pi*asin(gem$mucen)
+	xlim = xp+c(-40,40)
+	ylim = yp+c(-20,20)
+	map("world",xlim=xlim,ylim=ylim)
+	points(xp,yp,pch="+",col="red")
+	text(xp,yp,sprintf("pole (lat/long): %.3g %.3g",yp,xp),pos=3,col="red")
+	if (hasx11 && interactive()) invisible(readline("Press enter to continue"))
+}
