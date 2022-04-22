@@ -81,7 +81,7 @@ gpnorm = function(nd,lev,ind)
 
 	gpn = line2num(nd[indi])
 
-	noms = unique(sub(" +GPNORM +(\\w+.+?) +AVERAGE.+","\\1",nd[ind]))
+	noms = unique(sub(" *GPNORM +(\\w+.+?) +AVERAGE.+","\\1",nd[ind]))
 	noms[noms == "SURFACE PRESSURE"] = "SURF P"
 	noms[noms == "TEMPRATURE"] = "TEMP"
 	noms[noms == "U VELOCITY"] = "U VELOC."
@@ -158,9 +158,9 @@ spnorm = function(nd,lev,ind)
 	spn
 }
 
-countfield = function(nd,i)
+countfield = function(ind,ind2,nl2)
 {
-	match(nd[i],nd[-(1:i)])
+	which(diff(ind[seq(ind2[1],ind2[2])]) > nl2)[1]
 }
 
 indexpand = function(ind,nf,nl)
@@ -222,7 +222,10 @@ if (any(splot == "sp")) {
 	spl = list(sp1)
 	for (i in seq(along=spre)) {
 		ind2 = grep(spre[i],nd[ind-1])
-		if (length(ind2) == 0) next
+		if (length(ind2) == 0) {
+			cat("--> no norms for pattern:",spre[i],"\n")
+			next
+		}
 
 		indv = match(spnoms,dimnames(sp1)[[3]])
 		stopifnot(any(! is.na(indv)))
@@ -310,7 +313,8 @@ if (any(splot == "sp")) {
 				lty[-1] = 2
 				matplot(ttime,y,type="l",lty=lty,col=col,xlim=xlim,xlab=xlab,
 					ylab=spnoms[j],main=titre[j],xaxt="n")
-				legend("topleft",c(spref,spre),col=col,lty=lty)
+				leg = c(spref,spre[seq(along=spl)[-1]-1])
+				legend("topleft",leg,col=col,lty=lty)
 
 				axis(1,x)
 				reg = line(ttime,sp1[,1,j])
@@ -332,23 +336,28 @@ if (any(splot == "sp")) {
 }
 
 if (any(splot == "gp")) {
-	gmvre = "[UV] VELOCITY|SURFACE PRESSURE|TEMPERATURE|GRAD[LM]_\\w+"
+	gpfre1 = "[UVW] VELOCITY|(SURFACE )?PRESSURE|TEMPERATURE|GRAD[LM]_\\w+|GEOPOTENTIAL"
+	gpfre2 = "MOIST AIR SPECIF|ISOBARE CAPACITY|SURFACE DIV|d\\(DIV\\)\\*dP|ATND_\\w+"
+	gpfre = paste(gpfre1,gpfre2,sep="|")
 
 	if (type == "gpgmv") {
 		nl2 = 2+has.levels*nflevg
-		ind = grep(sprintf("GPNORM +(%s) +AVERAGE",gmvre),nd)
+		ind = grep(sprintf("GPNORM +(%s) +AVERAGE",gpfre),nd)
 		ind = ind[ind > i1]
-		ind1 = grep(gpref,nd[ind-1])
-		nf = countfield(nd[ind],ind1[1])
+		ind1 = grep(gpref,nd[ind-1],ignore.case=TRUE)
+		nf = countfield(ind,ind1,nl2)
 		indi = indexpand(ind[ind1],nf,nl2)
 		gp1 = gpnorm(nd,lev,indi)
 		gpl = list(gp1)
 		gpnoms = dimnames(gp1)[[4]]
 		for (i in seq(along=gpre)) {
-			ind2 = grep(gpre[i],nd[ind-1])
-			if (length(ind2) == 0) next
+			ind2 = grep(gpre[i],nd[ind-1],ignore.case=TRUE)
+			if (length(ind2) == 0) {
+				cat("--> no norms for pattern",gpre[i],"\n")
+				next
+			}
 
-			nf = countfield(nd[ind],ind2[1])
+			nf = countfield(ind,ind2,nl2)
 			indi = indexpand(ind[ind2],nf,nl2)
 			gpi = gpnorm(nd,lev,indi)
 			indv = match(gpnoms,dimnames(gpi)[[4]])
@@ -358,9 +367,9 @@ if (any(splot == "gp")) {
 
 		gpl = gpl[! sapply(gpl,is.null)]
 	} else {
-		ind = grep("GPNORM +\\w+.* +AVERAGE",nd)
+		ind = grep("GPNORM +\\w+.* +AVERAGE",nd,ignore.case=TRUE)
 		ind = ind[ind > i1]
-		indo = grep(sprintf("GPNORM +(%s|OUTPUT) +AVERAGE",gmvre),nd[ind],invert=TRUE)
+		indo = grep(sprintf("GPNORM +(%s|OUTPUT) +AVERAGE",gpfre),nd[ind],invert=TRUE)
 		gp1 = gpnorm(nd,lev,ind[indo])
 		gp1 = gp1[-1,,,,drop=FALSE]
 		gpl = list(gp1)
