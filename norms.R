@@ -220,6 +220,7 @@ if (any(splot == "sp")) {
 	sp1 = spnorm(nd,lev,ind[ind1[-1]])
 	spnoms = dimnames(sp1)[[3]]
 	spl = list(sp1)
+	leg = "t0"
 	for (i in seq(along=spre)) {
 		ind2 = grep(spre[i],nd[ind-1])
 		if (length(ind2) == 0) {
@@ -231,6 +232,7 @@ if (any(splot == "sp")) {
 		stopifnot(any(! is.na(indv)))
 		spi = spnorm(nd,lev,ind[ind2])
 		spl[[i+1]] = spi[,,indv,drop=FALSE]
+		leg[i+1] = sub("spnorm +","",spre[i])
 	}
 
 	nfrsdi = getvar(".+ NFRSDI",nd)
@@ -292,11 +294,8 @@ if (any(splot == "sp")) {
 		sp1 = spl[[1]]
 
 		cat("Spectral norms\n")
-		if (lev == 0) {
-			titre = paste("Spectral norm of",spnoms)
-		} else {
-			titre = paste("Spectral norm of",spnoms,"- lev",lev)
-		}
+		titre = paste("Spectral norm of",spnoms)
+		if (lev > 0) titre = paste(titre,"- lev",lev)
 
 		# 4 rows max, 2 columns
 		nf = length(spnoms)
@@ -313,18 +312,15 @@ if (any(splot == "sp")) {
 				lty[-1] = 2
 				matplot(ttime,y,type="l",lty=lty,col=col,xlim=xlim,xlab=xlab,
 					ylab=spnoms[j],main=titre[j],xaxt="n")
-				leg = c(spref,spre[seq(along=spl)[-1]-1])
 				legend("topleft",leg,col=col,lty=lty)
 
 				axis(1,x)
 				reg = line(ttime,sp1[,1,j])
 				abline(reg,lty=2)
 				tend = coef(reg)[2]*86400/tunit
+				tt = sprintf("Tend: %+.3e [unit]/day",tend)
 				if (tunit == 86400) {
-					tt = sprintf("Tend: %+.3e [unit]/day, variation: %.2g",tend,
-						tend*diff(range(ttime)))
-				} else {
-					tt = sprintf("Tend: %+.3e [unit]/day",tend)
+					tt = sprintf("%s, variation: %.2g",tt,tend*diff(range(ttime)))
 				}
 
 				mtext(tt,lty=2,cex=par("cex"))
@@ -350,6 +346,7 @@ if (any(splot == "gp")) {
 		gp1 = gpnorm(nd,lev,indi)
 		gpl = list(gp1)
 		gpnoms = dimnames(gp1)[[4]]
+		leg = sub("gpnorm +","",gpref)
 		for (i in seq(along=gpre)) {
 			ind2 = grep(gpre[i],nd[ind-1],ignore.case=TRUE)
 			if (length(ind2) == 0) {
@@ -363,16 +360,18 @@ if (any(splot == "gp")) {
 			indv = match(gpnoms,dimnames(gpi)[[4]])
 			stopifnot(any(! is.na(indv)))
 			gpl[[i+1]] = gpi[,,,indv,drop=FALSE]
+			leg[i+1] = sub("gpnorm +","",gpre[i])
 		}
 
 		gpl = gpl[! sapply(gpl,is.null)]
 	} else {
-		ind = grep("GPNORM +\\w+.* +AVERAGE",nd,ignore.case=TRUE)
+		ind = grep("GPNORM +\\w+.* +AVERAGE",nd)
 		ind = ind[ind > i1]
 		indo = grep(sprintf("GPNORM +(%s|OUTPUT) +AVERAGE",gpfre),nd[ind],invert=TRUE)
 		gp1 = gpnorm(nd,lev,ind[indo])
 		gp1 = gp1[-1,,,,drop=FALSE]
 		gpl = list(gp1)
+		leg = "t0"
 	}
 
 	nfrgdi = getvar(".+ NFRGDI",nd)
@@ -437,15 +436,12 @@ if (any(splot == "gp")) {
 
 		cat("GP norms\n")
 		gpnoms = dimnames(gp1)[[4]]
-		if (lev == 0) {
-			titre = paste("GP norm of",gpnoms)
-		} else {
-			titre = paste("GP norm of",gpnoms,"- lev",lev)
-		}
+		titre = paste("GP norm of",gpnoms)
+		if (lev > 0) titre = paste(titre,"- lev",lev)
 
 		# 3 rows max, 2 columns
 		nf = length(gpnoms)
-		nr = min(3,nf)
+		nr = max(2,min(3,nf))
 		for (i in seq((nf-1)%/%nr+1)-1) {
 			if (! hasx11) png(sprintf("gpnorm%d.png",i))
 
@@ -461,23 +457,23 @@ if (any(splot == "gp")) {
 				reg = line(ttime,gp1[,1,1,j])
 				abline(reg,lty=2)
 				tend = coef(reg)[2]*86400/tunit
+				tt = sprintf("Tend: %+.3e [unit]/day",tend)
 				if (tunit == 86400) {
-					tt = sprintf("Tend: %+.3e [unit]/day, variation: %.2g",tend,
-						tend*diff(range(ttime)))
-				} else {
-					tt = sprintf("Tend: %+.3e [unit]/day",tend)
+					tt = sprintf("%s, variation: %.2g",tt,tend*diff(range(ttime)))
 				}
 
+				legend("topleft",leg,col=col,lty=lty)
 				mtext(tt,lty=2,cex=par("cex"))
 				axis(1,x)
 				if (all(gp1[,1,,j] == 0)) text(sum(range(ttime))/2,.5,"all values = 0")
+
 				matplot(ttime,gp1[,1,,j],type="l",lty=1:3,xlab=xlab,ylab=gpnoms[j],
 					xlim=xlim,main=paste(titre[j],"(ave/min/max)"),col=1,xaxt="n")
+				axis(1,x)
 				for (k in seq(along=gpl)[-1]) {
 					if (all(is.na(gpl[[k]][,1,,j]))) next
 					matlines(ttime,gpl[[k]][,1,,j],lty=1:3,col=k)
 				}
-				axis(1,x)
 			}
 
 			if (ask) invisible(readline("Press enter to continue"))
