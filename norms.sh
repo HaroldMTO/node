@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 diag=~/util/diag
 
@@ -8,13 +8,15 @@ usage()
 {
 	printf "
 Description:
-	Print HTML output related to various plots (SP/GP norms) from model forecast
+	Produce HTML output (stdout or file) related to various plots (SP/GP norms) from \
+model forecast
 
 Usage:
-	plot.sh FILE [-h]
+	plot.sh FILE [-o HTML] [-h]
 
 Options:
-	FILE: text file containing lines NODE file names and their description
+	FILE: text file containing lines made of NODE file names and their description
+	HTML: output file containing HTML content (text and links to images)
 	-h: print this help and exit normally
 
 Details:
@@ -25,55 +27,104 @@ separated with ':'.
 "
 }
 
-if [ $# -eq 0 ] || echo $* | grep -qE '(^| )\-h\>'
+if [ $# -eq 0 ]
 then
 	usage
 	exit
 fi
 
-file $1 | grep -q text
+fin=""
+fout=""
+while [ $# -ne 0 ]
+do
+	case $1 in
+	-o)
+		fout=$2
+		shift
+		;;
+	-h)
+		usage
+		exit
+		;;
+	*)
+		fin=$1
+		;;
+	esac
+
+	shift
+done
+
+if [ -z "$fin" -o -z "$fout" ]
+then
+	printf "Error: input option missing
+fin: '$fin'
+fout: '$fout'
+" >&2
+	exit 1
+fi
+
+file $fin | grep -q text
 
 temp=$(mktemp -d -t plotXXX)
 
 trap 'rm -r $temp' 0
 
-grep -E '^ *node\w+ *: *\w' $1 > $temp/info.txt
-loc=$(dirname $1)
+if ! grep -Ei '^ *node\w+ *: *\w' $fin > $temp/info.txt
+then
+	echo "Error: pattern 'node...: ...' not found in $fin" >&2
+	exit 1
+fi
+
+loc=$(dirname $fin)
 xpdir=$(cd $loc > /dev/null && pwd)
 
 cd $temp > /dev/null
 
 while read -a ff
 do
-	#echo "Line read: '${ff[*]}'"
+	echo "Line read: '${ff[*]}'"
 	fic=$(echo ${ff[0]} | sed -re 's/ *://')
 	file $xpdir/$fic | grep -qE "(ASCII|UTF-8 Unicode) text" || continue
 
 	tt=$(echo "${ff[*]}" | sed -re 's/.+: +//')
 
-	echo $fic | grep -qE '\<node\w' || continue
+	echo $fic | grep -qEi '\<node\w' || continue
 	grep -qEi '^ \w+:\w+:\w+ +STEP +[0-9]+' $xpdir/$fic || continue
 
-	dd=$(echo $fic | sed -re 's:^node::')
+	dd=$(echo $fic | sed -re 's:^node::i')
 	mkdir -p $xpdir/$dd
 
 	R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=sp \
-		spre="spnorm spect1\>:spnorm spect1si" > sp.txt
+		spre="spnorm .*t1\>:spnorm .*t1si"
 	convert Rplots.pdf spnorm.png
 
 	if grep -qE "gpnorm gmvt0" $xpdir/$fic
 	then
 		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpgmv \
-			gpre="gpnorm gmvt1 sl:gpnorm gmvt1 lag" > gmv.txt
+			gpre="gpnorm gmvt1 sl:gpnorm gmvt1 lag"
 		convert Rplots.pdf gpgmvnorm.png
 	fi
 
-	R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp > gfl.txt
+	if grep -qE "gpnorm adiab" $xpdir/$fic
+	then
+		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpgmv \
+			gpref="gpnorm adiab"
+		convert Rplots.pdf gpadiabnorm.png
+	fi
+
+	if grep -qE "gpnorm zb2" $xpdir/$fic
+	then
+		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpgmv \
+			gpref="gpnorm zb2 cpg" gpre="gpnorm zb2 sl"
+		convert Rplots.pdf gpsinorm.png
+	fi
+
+	R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp
 	convert Rplots.pdf gpgflnorm.png
 
 	mv *.png $xpdir/$dd
 
-	for pre in sp gpgmv gpgfl
+	for pre in sp gpgmv gpgfl gpadiab gpsi
 	do
 		{
 			echo "<tr>"
@@ -102,7 +153,11 @@ do
 	base=$(printf "%s %dh" $date $((res/3600)))
 	sed -re "s:TAG NODE:$fic:" -e "s:TAG BASE:$base:" -e "s:TAG DESC:$tt:" \
 		-e '/TAG SP/r sp.html' -e '/TAG GPGMV/r gpgmv.html' -e '/TAG GPGFL/r gpgfl.html' \
+		-e '/TAG GPADIAB/r gpadiab.html' -e '/TAG GPSI/r gpsi.html' \
 		$diag/img.html >> img.html
 done < info.txt
 
-sed -re '/TAG IMG/r img.html' $diag/plots.html
+sed -re '/TAG IMG/r img.html' $diag/norms.html > out.html
+
+cd $OLDPWD
+mv $temp/out.html $fout

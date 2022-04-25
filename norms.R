@@ -18,7 +18,7 @@ getvar = function(var,nd,sep="=")
 line2num = function(nd)
 {
 	lre = regmatches(nd,gregexpr(sprintf("(%s|\\<NaN\\>)",Gnum),nd))
-	lre = lapply(lre,function(x) gsub("(\\d+)(\\-\\d+)","\\1E\\2",x))
+	lre = lapply(lre,function(x) gsub("(\\d+)([-+]\\d+)","\\1E\\2",x))
 	sapply(lre,as.numeric)
 }
 
@@ -252,6 +252,7 @@ if (any(splot == "sp")) {
 		np = nc*nr
 
 		for (i in seq((nf-1)%/%np+1)-1) {
+			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 			if (! hasx11) png(sprintf("spnormv%d.png",i))
 
 			par(mfrow=c(nr,nc),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
@@ -259,8 +260,6 @@ if (any(splot == "sp")) {
 				plot(sp1[nt,,j],lev,type="l",ylim=ylim,xlab=spnoms[j],ylab="Level",main=tt[j])
 				abline(v=0,col="darkgrey",lty=2)
 			}
-
-			if (ask) invisible(readline("Press enter to continue"))
 		}
 	} else {
 		if (dim(sp1)[1] == 1) stop("1 time-step only (stop)\n")
@@ -293,7 +292,7 @@ if (any(splot == "sp")) {
 		spl = lapply(spl,function(x) x[it,,,drop=FALSE])
 		sp1 = spl[[1]]
 
-		cat("Spectral norms\n")
+		cat("Spectral norms",spref,"\n")
 		titre = paste("Spectral norm of",spnoms)
 		if (lev > 0) titre = paste(titre,"- lev",lev)
 
@@ -302,6 +301,7 @@ if (any(splot == "sp")) {
 		nr = min(1+(nf-1)%/%2,4)
 		np = 2*nr
 		for (i in seq((nf-1)%/%np+1)-1) {
+			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 			if (! hasx11) png(sprintf("spnorm%d.png",i))
 
 			par(mfrow=c(nr,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
@@ -325,8 +325,6 @@ if (any(splot == "sp")) {
 
 				mtext(tt,lty=2,cex=par("cex"))
 			}
-
-			if (ask) invisible(readline("Press enter to continue"))
 		}
 	}
 }
@@ -389,6 +387,7 @@ if (any(splot == "gp")) {
 		np = nc*nr
 
 		for (i in seq((nf-1)%/%nr+1)-1) {
+			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 			if (! hasx11) png(sprintf("gpnormv%d.png",i))
 
 			par(mfrow=c(nr,nc),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
@@ -400,8 +399,6 @@ if (any(splot == "gp")) {
 					abline(v=0,col="darkgrey",lty=2)
 				}
 			}
-
-			if (ask) invisible(readline("Press enter to continue"))
 		}
 	} else {
 		if (nt == 1) stop("1 time-step only (stop)\n")
@@ -434,7 +431,7 @@ if (any(splot == "gp")) {
 		gpl = lapply(gpl,function(x) x[it,,,,drop=FALSE])
 		gp1 = gpl[[1]]
 
-		cat("GP norms\n")
+		cat("GP norms",gpref,"\n")
 		gpnoms = dimnames(gp1)[[4]]
 		titre = paste("GP norm of",gpnoms)
 		if (lev > 0) titre = paste(titre,"- lev",lev)
@@ -443,15 +440,16 @@ if (any(splot == "gp")) {
 		nf = length(gpnoms)
 		nr = max(2,min(3,nf))
 		for (i in seq((nf-1)%/%nr+1)-1) {
+			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 			if (! hasx11) png(sprintf("gpnorm%d.png",i))
 
 			par(mfrow=c(nr,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 
 			for (j in 1:min(nf-nr*i,nr)+nr*i) {
 				y = sapply(gpl,function(x) x[,1,1,j])
-				lty = seq(along=gpl)
+				col = lty = seq(along=gpl)
 				lty[-1] = 2
-				matplot(ttime,y,type="l",lty=lty,xlim=xlim,xlab=xlab,ylab=gpnoms[j],
+				matplot(ttime,y,type="l",lty=lty,col=col,xlim=xlim,xlab=xlab,ylab=gpnoms[j],
 					main=paste(titre[j],"average"),xaxt="n")
 
 				reg = line(ttime,gp1[,1,1,j])
@@ -467,7 +465,7 @@ if (any(splot == "gp")) {
 				axis(1,x)
 				if (all(gp1[,1,,j] == 0)) text(sum(range(ttime))/2,.5,"all values = 0")
 
-				matplot(ttime,gp1[,1,,j],type="l",lty=1:3,xlab=xlab,ylab=gpnoms[j],
+				matplot(ttime,gp1[,1,,j],type="l",lty=c(1,3,3),xlab=xlab,ylab=gpnoms[j],
 					xlim=xlim,main=paste(titre[j],"(ave/min/max)"),col=1,xaxt="n")
 				axis(1,x)
 				for (k in seq(along=gpl)[-1]) {
@@ -475,8 +473,6 @@ if (any(splot == "gp")) {
 					matlines(ttime,gpl[[k]][,1,,j],lty=1:3,col=k)
 				}
 			}
-
-			if (ask) invisible(readline("Press enter to continue"))
 		}
 	}
 }

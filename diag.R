@@ -786,7 +786,7 @@ ficana = "ARPE.0000.000"
 #ficana[inds] = "analysis.surf-arpege.tl1798-c22.fa"
 #ficana[! inds] = "analysis.atm-arpege.tl1798-c22.fa"
 
-dstats = array(NA_real_,c(length(fics),5,npar))
+dstats = dstatd = array(NA_real_,c(length(fics),5,npar))
 
 hasx11 = capabilities("X11")
 ask = hasx11 && interactive()
@@ -808,12 +808,12 @@ for (i in seq(along=fics)) {
 	#ilateq = equalize(mapf,offset=3)
 	#if (length(ilateq) < frlow$nlat) frlow = degrade(frlow,ilateq)
 
+	if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 	if (! hasx11) png("stretch_%s.png")
 	plot(mapf,type="l",main=c("Stretching coefficient by latitude","normalized at Equator"),
 		xlab="Latitude index",ylab="Stretching coef.",log="y")
 	#rug(ilateq,.02)
 	#points(ilateq,mapf[ilateq],pch=20,cex=.5)
-	if (ask) invisible(readline("Press enter to continue"))
 
 	eta = frlow$A/Gvp0+frlow$B
 	stopifnot(all(abs(ilev) <= length(eta)))
@@ -858,9 +858,9 @@ for (i in seq(along=fics)) {
 		cat(". get fields matching pattern",patt,"\n")
 		data = getField(fics[i],patt,desc$symbol[j],frame,frlow)
 
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		if (! hasx11) png(sprintf("hist_%s.png",desc$symbol[j]))
 		hist(data,col="whitesmoke",main=sprintf("Distribution of %s",desc$longname[j]))
-		if (ask) invisible(readline("Press enter to continue"))
 
 		nl = dim(data)[2]
 		dstats[i,,j] = quantile(data[,nl],c(0,.1,.5,.9,1),names=FALSE)
@@ -870,10 +870,10 @@ for (i in seq(along=fics)) {
 		cat("Statistics of zonal difference:\n")
 		print(summary(as.vector(ddx)))
 
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		if (! hasx11) png(sprintf("spec45_%s.png",desc$symbol[j]))
 		d45 = lat45(data,frlow)
 		spectrum(d45[,nl],c(3,3),main="Smoothed spectral density of lat ~45")
-		if (ask) invisible(readline("Press enter to continue"))
 
 		if (nl == 1) {
 			mapex(data,frlow,desc[j,])
@@ -889,20 +889,20 @@ for (i in seq(along=fics)) {
 			xy = zoom(data,frlow,dom)
 			print(summary(as.vector(xy$data)))
 
+			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 			if (! hasx11) png(sprintf("maxprof_%s.png",desc$symbol[j]))
 			tt = "Vertical profile at max value"
 			plotz(data[ix,],etai,ylim=yeta,main=c(tt,desc$longname[j]),
 				xlab=desc$longname[j],ylab=expression(eta))
-			if (hasx11 && ask) invisible(readline("Press enter to continue"))
 
 			cat("Mean vertical profile\n")
 			datam = apply(data,2,mean)
 
+			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 			if (! hasx11) png(sprintf("meanprof_%s.png",desc$symbol[j]))
 			tt = sprintf("Field %s",desc$longname[j])
 			plotz(datam,etai,ylim=yeta,main=c("Mean vertical profile",tt),
 				xlab=desc$longname[j],ylab=expression(eta))
-			if (hasx11 && ask) invisible(readline("Press enter to continue"))
 
 			if (FALSE) {
 			ddz = vgrad(data,frlow)
@@ -922,6 +922,7 @@ for (i in seq(along=fics)) {
 				yzn = section(data,frlow,0,c(0,90))
 				ind = order(yzs$lat)
 
+				if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 				if (! hasx11) png(sprintf("section_%s.png",desc$symbol[j]),720)
 				par(mfrow=c(1,2),xaxs="i",yaxs="i")
 				tt = sprintf("Cross-section of %s",desc$longname[j])
@@ -929,7 +930,6 @@ for (i in seq(along=fics)) {
 					xlab="tilted lat",ylab="eta")
 				plotv(yzn$lat,etai,yzn$data,main=c(tt,"tilted meridian 0"),
 					xlab="tilted lat",ylab="eta",xrev=TRUE)
-				if (hasx11 && ask) invisible(readline("Press enter to continue"))
 			}
 		}
 
@@ -957,6 +957,8 @@ for (i in seq(along=fics)) {
 
 		ddiff = data-datao
 
+		dstatd[i,,j] = quantile(ddiff[,nl],c(0,.1,.5,.9,1),names=FALSE)
+
 		cat("Statistics around diff min/max value:\n")
 		i1 = arrayInd(which.min(ddiff),dim(ddiff))[1,1]
 		i2 = arrayInd(which.max(ddiff),dim(ddiff))[1,1]
@@ -966,11 +968,11 @@ for (i in seq(along=fics)) {
 		drms = sqrt(mean(xy$data^2))
 		cat("RMSE at local min:",drms,"\n")
 
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		if (! hasx11) png(sprintf("diffmin_%s.png",desc$symbol[j]))
 		l = mapxy(dom,main=desc$longname[j])
 		plotxy(frlow$long,frlow$lat,ddiff[,1])
 		lines(l)
-		if (ask) invisible(readline("Press enter to continue"))
 
 		dom = domain(frlow,i2,c(-20,20),c(-30,30))
 		xy = zoom(ddiff,frlow,dom)
@@ -978,25 +980,26 @@ for (i in seq(along=fics)) {
 		drms = sqrt(mean(xy$data^2))
 		cat("RMSE at local max:",drms,"\n")
 
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		if (! hasx11) png(sprintf("diffmin_%s.png",desc$symbol[j]))
 		l = mapxy(dom,main=desc$longname[j])
 		plotxy(frlow$long,frlow$lat,ddiff[,1])
 		lines(l)
-		if (ask) invisible(readline("Press enter to continue"))
 
 		cat("Statistics of forecast error:\n")
 		print(summary(as.vector(ddiff)))
 		drms = sqrt(mean(ddiff^2))
 		cat("Global bias/RMSE:",mean(ddiff),drms,"\n")
 
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		if (! hasx11) png(sprintf("histdiff_%s.png",desc$symbol[j]))
 		tt = sprintf("Distribution of difference from analysis of %s",desc$longname[j])
 		hist(ddiff,main=tt)
-		if (ask) invisible(readline("Press enter to continue"))
 
 		if (dim(data)[2] == 1) {
 			mapex(ddiff,frlow,desc[j,])
 		} else if (desc$ltype[j] == "S") {
+			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 			if (! hasx11) png(sprintf("profile_%s.png",desc$symbol[j]))
 			par(mfrow=c(1,2))
 			tt = sprintf("Field %s",desc$longname[j])
@@ -1004,12 +1007,12 @@ for (i in seq(along=fics)) {
 				xlab=desc$longname[j],ylab=expression(eta))
 			plotz(data[i2,],etai,ylim=yeta,main=c(tt,"Profile at point 'max of error'"),
 				xlab=desc$longname[j],ylab=expression(eta))
-			if (hasx11 && ask) invisible(readline("Press enter to continue"))
 
          yzs = section(ddiff,frlow,180,c(0,90))
          yzn = section(ddiff,frlow,0,c(0,90))
          ind = order(yzs$lat)
 
+			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
          if (! hasx11) png(sprintf("sectiondiff_%s.png",desc$symbol[j]),720)
          par(mfrow=c(1,2),xaxs="i",yaxs="i")
 			tt = sprintf("Cross-section diff of %s",desc$longname[j])
@@ -1017,21 +1020,20 @@ for (i in seq(along=fics)) {
             xlab="tilted lat",ylab="eta",nlevels=7)
          plotv(yzn$lat,etai,yzn$data,main=c(tt,"tilted meridian 0"),
             xlab="tilted lat",ylab="eta",nlevels=7,xrev=TRUE)
-			if (hasx11 && ask) invisible(readline("Press enter to continue"))
 
 			ns = length(yzs$lat)
 			dataf = yzn$data
 			dataf[1:ns,] = yzs$data[ind,]
 			#levels = prettydiff(dataf,7)
 
+			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 			if (! hasx11) png(sprintf("sectionvdiff_%s.png",desc$symbol[j]),720)
 			x = seq(0,1,length.out=dim(dataf)[1])
 			plotv(x,etai,dataf,nlevels=7,main=tt,xlab=Gxlab,ylab="eta",xaxs="i",yaxs="i")
-			if (hasx11 && ask) invisible(readline("Press enter to continue"))
 
+			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 			if (! hasx11) png(sprintf("sectionfill_%s.png",desc$symbol[j]),720)
 			plotf(etai,dataf,nlevels=7,color.palette=cm.colors,main=tt,xlab=Gxlab,ylab="eta")
-			if (hasx11 && ask) invisible(readline("Press enter to continue"))
 
 			dbias = apply(ddiff,2,mean)
 			drms = apply(ddiff,2,function(x) sqrt(mean(x^2)))
@@ -1043,48 +1045,48 @@ for (i in seq(along=fics)) {
 
 	if (! is.null(datax) && ! is.null(datay)) {
 		ff = sqrt(datax^2+datay^2)
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		hist(ff,col="whitesmoke",main="Distribution of wind speed")
-		if (ask) invisible(readline("Press enter to continue"))
 
 		print(summary(as.vector(ff)))
 		x = zoom(datax,frlow,france)
 		y = zoom(datay,frlow,france)
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		if (! hasx11) png(sprintf("france_uv.png"))
 		l = mapxy(france,main="u/v wind components")
 		plotxy2(x$long,x$lat,x$data[,nl],y$data[,nl])
 		lines(l)
-		if (ask) invisible(readline("Press enter to continue"))
 
 		x = zoom(datax,frlow,europe)
 		y = zoom(datay,frlow,europe)
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		if (! hasx11) png(sprintf("euro_uv.png"))
 		l = mapxy(europe,main="u/v wind components")
 		plotxy2(x$long,x$lat,x$data[,nl],y$data[,nl])
 		lines(l)
-		if (ask) invisible(readline("Press enter to continue"))
 	}
 
 	if (! is.null(dataox) && ! is.null(dataoy)) {
 		ffo = sqrt(dataox^2+dataoy^2)
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		hist(ffo,col="whitesmoke",main="Distribution of wind speed")
-		if (ask) invisible(readline("Press enter to continue"))
 
 		print(summary(as.vector(ffo)))
 		x = zoom(dataox,frlow,france)
 		y = zoom(dataoy,frlow,france)
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		if (! hasx11) png(sprintf("france_uvo.png"))
 		l = mapxy(france,main="u/v wind components")
 		plotxy2(x$long,x$lat,x$data[,nl],y$data[,nl])
 		lines(l)
-		if (ask) invisible(readline("Press enter to continue"))
 
 		x = zoom(dataox,frlow,europe)
 		y = zoom(dataoy,frlow,europe)
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		if (! hasx11) png(sprintf("euro_uvo.png"))
 		l = mapxy(europe,main="u/v wind components")
 		plotxy2(x$long,x$lat,x$data[,nl],y$data[,nl])
 		lines(l)
-		if (ask) invisible(readline("Press enter to continue"))
 	}
 
 	if (! is.null(datax) && ! is.null(datay) && ! is.null(dataox) && ! is.null(dataoy)) {
@@ -1093,23 +1095,33 @@ for (i in seq(along=fics)) {
 		drms = sqrt(mean(ffd^2))
 		cat("Global bias/RMSE:",mean(ffd),drms,"\n")
 
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		if (! hasx11) png("histdiff_ff.png")
 		hist(ffd,col="whitesmoke",main="Distribution of difference from ref of wind speed")
-		if (ask) invisible(readline("Press enter to continue"))
 
 		xy = zoom(ffd,frlow,europe)
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		if (! hasx11) png(sprintf("euro_ffd.png"))
 		mapdom(europe,xy,xy$data[,1],main="Difference of wind speed")
-		if (ask) invisible(readline("Press enter to continue"))
 	}
 }
 
 if (length(fics) > 1) {
-	if (! hasx11) png("dstats.png")
 	tt = sprintf("Forecast of %s",desc$longname)
+
+	if (! hasx11) png("dstats.png")
 	for (j in seq(along=desc$faname)) {
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		matplot(dstats[,,j],type="o",lty=1,col=1,pch=c("n","1","5","9","x"),
 			xlab="Forecast time",ylab=desc$symbol[j],main=tt[j])
-		if (hasx11 && ask) invisible(readline("Press enter to continue"))
+	}
+
+	tt = sprintf("Forecast error of %s",desc$longname)
+
+	if (! hasx11) png("dstatd.png")
+	for (j in seq(along=desc$faname)) {
+		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
+		matplot(dstatd[,,j],type="o",lty=1,col=1,pch=c("n","1","5","9","x"),
+			xlab="Forecast time",ylab=desc$symbol[j],main=tt[j])
 	}
 }

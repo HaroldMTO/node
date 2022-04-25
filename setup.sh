@@ -11,10 +11,11 @@ Description:
 	Print HTML output related to a few plots from setup information of any model forecast
 
 Usage:
-	setup.sh FILE [-h]
+	setup.sh FILE [-o HTML] [-h]
 
 Options:
 	FILE: NODE file
+	HTML: output file containing HTML content (text and links to images)
 	-h: print this help and exit normally
 
 Details:
@@ -26,22 +27,54 @@ with prefix 'setup'. Be aware that in this latter case, the directory is not rem
 "
 }
 
-if [ $# -eq 0 ] || echo $* | grep -qE '(^| )\-h\>'
+if [ $# -eq 0 ]
 then
 	usage
 	exit
 fi
 
-file $1 | grep -q text
-grep -qi 'END OF SETUPS' $1
+fin=""
+fout=""
+while [ $# -ne 0 ]
+do
+	case $1 in
+	-o)
+		fout=$2
+		shift
+		;;
+	-h)
+		usage
+		exit
+		;;
+	*)
+		fin=$1
+		;;
+	esac
 
-loc=$(dirname $1)
-xpdir=$(cd $loc > /dev/null && pwd)
-fic=$xpdir/$(basename $1)
+	shift
+done
 
-if echo $fic | grep -qE '\<node\w'
+if [ -z "$fin" ]
 then
-	temp=$(echo $1 | sed -re 's:\<node::')
+	echo "Error: input option missing" >&2
+	exit 1
+elif [ -z "$fout" ] || ! echo $fout | grep -qE '^[[:alpha:]]'
+then
+	echo "'$fout': null or not a valid file name" >&2
+	exit 1
+fi
+
+file $fin | grep -q text
+grep -qi 'END OF SETUPS' $fin
+
+loc=$(dirname $fin)
+xpdir=$(cd $loc > /dev/null && pwd)
+fic=$xpdir/$(basename $fin)
+
+if echo $fic | grep -qEi '\<node\w'
+then
+	temp=$(echo $fic | sed -re 's:\<node::i')
+	mkdir $temp
 else
 	temp=$(mktemp -d -p $loc setupXXX)
 fi
@@ -61,4 +94,7 @@ date=$(grep -E 'NUDATE *=' $fic | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
 res=$(grep -E 'NUDATE *=' $fic | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
 base=$(printf "%s %dh" $date $((res/3600)))
 sed -re "s:TAG NODE:$1:" -e "s:TAG BASE:$base:" -e "s:TAG DIR:$temp:g" \
-	-e '/TAG MAP/r map.txt' $diag/setup.html
+	-e '/TAG MAP/r map.txt' $diag/setup.html > out.html
+
+cd $OLDPWD
+mv $temp/out.html $fout
