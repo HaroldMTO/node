@@ -1,6 +1,6 @@
 #!/bin/bash
 
-diag=~/util/diag
+diag=~/util/diags
 
 set -e
 
@@ -69,7 +69,7 @@ temp=$(mktemp -d -t plotXXX)
 
 trap 'rm -r $temp' 0
 
-if ! grep -Ei '^ *node\w+ *: *\w' $fin > $temp/info.txt
+if ! grep -Ei '^ *node\.?\w+ *: *\w' $fin > $temp/info.txt
 then
 	echo "Error: pattern 'node...: ...' not found in $fin" >&2
 	exit 1
@@ -88,7 +88,7 @@ do
 
 	tt=$(echo "${ff[*]}" | sed -re 's/.+: +//')
 
-	echo $fic | grep -qEi '\<node\w' || continue
+	echo $fic | grep -qEi '\<node\.\w' || continue
 	grep -qEi '^ \w+:\w+:\w+ +STEP +[0-9]+' $xpdir/$fic || continue
 
 	dd=$(echo $fic | sed -re 's:^node::i')

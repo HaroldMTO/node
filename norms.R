@@ -331,8 +331,9 @@ if (any(splot == "sp")) {
 
 if (any(splot == "gp")) {
 	gpfre1 = "[UVW] VELOCITY|(SURFACE )?PRESSURE|TEMPERATURE|GRAD[LM]_\\w+|GEOPOTENTIAL"
-	gpfre2 = "MOIST AIR SPECIF|ISOBARE CAPACITY|SURFACE DIV|d\\(DIV\\)\\*dP|ATND_\\w+"
-	gpfre = paste(gpfre1,gpfre2,sep="|")
+	gpfre2 = "MOIST AIR SPECIF|ISOBARE CAPACITY|SURFACE DIV|d\\(DIV\\)\\*dP"
+	gpfre3 = "(ATND|ADIAB|CTY|SISL)_\\w+"
+	gpfre = paste(gpfre1,gpfre2,gpfre3,sep="|")
 
 	if (type == "gpgmv") {
 		nl2 = 2+has.levels*nflevg
