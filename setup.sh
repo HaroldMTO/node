@@ -1,6 +1,6 @@
 #!/bin/sh
 
-diag=~/util/diag
+diag=~/util/diags
 
 set -e
 
@@ -58,43 +58,45 @@ if [ -z "$fin" ]
 then
 	echo "Error: input option missing" >&2
 	exit 1
-elif [ -z "$fout" ] || ! echo $fout | grep -qE '^[[:alpha:]]'
-then
-	echo "'$fout': null or not a valid file name" >&2
-	exit 1
 fi
 
 file $fin | grep -q text
 grep -qi 'END OF SETUPS' $fin
 
-loc=$(dirname $fin)
-xpdir=$(cd $loc > /dev/null && pwd)
-fic=$xpdir/$(basename $fin)
-
-if echo $fic | grep -qEi '\<node\w'
+if [ -z "$fout" ]
 then
-	temp=$(echo $fic | sed -re 's:\<node::i')
-	mkdir $temp
+	R --slave -f $diag/procmap.R --args $fin
 else
-	temp=$(mktemp -d -p $loc setupXXX)
+	loc=$(dirname $fin)
+	xpdir=$(cd $loc > /dev/null && pwd)
+	fic=$xpdir/$(basename $fin)
+
+	if echo $fic | grep -qEi '\<node\w'
+	then
+		temp=$(echo $fic | sed -re 's:\<node::i')
+		mkdir -p $temp
+	else
+		temp=$(mktemp -d -p $loc setupXXX)
+	fi
+
+	echo "--> output sent to $temp"
+	cd $temp > /dev/null
+
+	R --slave -f $diag/procmap.R --args $fic png > out.txt
+
+	{
+		echo "<pre>"
+		grep -A 1 -iw values out.txt
+		grep -w SL out.txt
+		echo "</pre>"
+	} > map.txt
+
+	date=$(grep -E 'NUDATE *=' $fic | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
+	res=$(grep -E 'NUDATE *=' $fic | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
+	base=$(printf "%s %dh" $date $((res/3600)))
+	sed -re "s:TAG NODE:$1:" -e "s:TAG BASE:$base:" -e "s:TAG DIR:$temp:g" \
+		-e '/TAG MAP/r map.txt' $diag/setup.html > out.html
+
+	cd $OLDPWD
+	mv $temp/out.html $fout
 fi
-
-cd $temp > /dev/null
-
-R --slave -f $diag/procmap.R --args $fic png > out.txt
-
-{
-	echo "<pre>"
-	grep -A 1 -iw values out.txt
-	grep -w SL out.txt
-	echo "</pre>"
-} > map.txt
-
-date=$(grep -E 'NUDATE *=' $fic | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
-res=$(grep -E 'NUDATE *=' $fic | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
-base=$(printf "%s %dh" $date $((res/3600)))
-sed -re "s:TAG NODE:$1:" -e "s:TAG BASE:$base:" -e "s:TAG DIR:$temp:g" \
-	-e '/TAG MAP/r map.txt' $diag/setup.html > out.html
-
-cd $OLDPWD
-mv $temp/out.html $fout

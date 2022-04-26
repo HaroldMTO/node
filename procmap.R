@@ -265,6 +265,8 @@ plotmap = function(sta,onl)
 	}
 
 	j = mp1[1,]%/%2
+	#rug(offlat,.01,side=4)
+	mtext(mp1[2,],2,at=offlat+j,adj=1.2,las=2,cex=.7)
 	x = unlist(lapply(seq(along=j),function(i) sta[[i]][j[i],]+onl[[i]][j[i],]%/%2))
 	y = offlat+j
 	y = unlist(lapply(seq(along=y),function(i) rep(y[i],each=mp1[2,i])))
@@ -442,6 +444,7 @@ plot(std$rho,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Density of air"),
 abline(h=c(0,std$Z[c(itropt,itropo)]),lty=2)
 par(op)
 
+cat("Vertical SI system and spectral horizontal diffusion\n")
 si = silev(nd,nflevg)
 
 if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
@@ -457,17 +460,20 @@ plot(si$sidphi,1:nflevg,type="o",lty=1,pch="-",main="SIDPHI: diff. of geopotenti
 
 if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 if (! hasx11) png("sihd.png")
-op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+op = par(mfrow=c(2,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 plot(si$pdi/100,1:nflevg,type="o",lty=1,pch="-",main="PDILEV: 1+7.5*(3-log10(P))",
 	xlab="PDILEV (hPa)",ylab="Level",ylim=ylim,cex=1.5)
 plot(si$knshd,1:nflevg,type="o",lty=1,pch="-",main="KNSHD",
 	xlab="KNSHD",ylab="Level",ylim=ylim,cex=1.5)
-plot(si$rcordit,1:nflevg,type="o",lty=1,pch="-",main="RCORDIT",
+plot(si$rcordit,1:nflevg,type="o",lty=1,pch="-",main="RCORDIT (tropo)",
 	xlab="RCORDIT",ylab="Level",ylim=ylim,cex=1.5)
+plot(si$rcordih,1:nflevg,type="o",lty=1,pch="-",main="RCORDIH",
+	xlab="RCORDIH",ylab="Level",ylim=ylim,cex=1.5)
 plot(si$rcordif,1:nflevg,type="o",lty=1,pch="-",main="RCORDIF",
 	xlab="RCORDIF",ylab="Level",ylim=ylim,cex=1.5)
 par(op)
 
+cat("Spectral and vertical partitionning\n")
 nprtrw = getvar("NPRTRW",nd)
 nprtrn = getvar("NPRTRN",nd)
 nprtrns = getvar("NPRTRNS",nd)
@@ -480,11 +486,11 @@ if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 if (! hasx11) png("specgp.png")
 op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 ss = sprintf("nmeng: %d... %d",min(sp$nmeng),max(sp$nmeng))
-plot(sp$nmeng,type="h",main=c("Wave cut-off per latitude",ss),xlab="Latitude index",
+plot(sp$nmeng,type="l",main=c("Wave cut-off per latitude",ss),xlab="Latitude index",
 	ylab="Nb of waves",xaxt="n")
 axis(1,pretty(seq(along=sp$nmeng)/8,8)*8)
 ss = sprintf("ndglu: %d... %d",min(sp$ndglu),max(sp$ndglu))
-plot(0:nm,sp$ndglu,type="h",main=c("Nb of longitudes per wave",ss),
+plot(0:nm,sp$ndglu,type="l",main=c("Nb of longitudes per wave",ss),
 	xlab="Wave index 'jm'",ylab="Nb of longitudes",xaxt="n")
 axis(1,pretty((seq(along=sp$ndglu)-1)/8,8)*8)
 par(op)
@@ -502,6 +508,23 @@ x = cumsum(sp$numpp)
 axis(1,c(x[1]/2,(x[-1]+x[-length(x)])/2),sprintf("%d (%d)",seq(sp$numpp),sp$numpp))
 par(op)
 
+if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
+if (! hasx11) png("vset.png")
+plot(sp$nbsetlev,1:nflevg,type="p",ylim=ylim,main="V-set and levels",xlab="V-set",
+	ylab="Level",pch="-")
+
+if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
+if (! hasx11) png("speclap.png")
+op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+plot(sp$rlapdi,type="l",main="Eigen-values of the Laplacian",xlab="Wave index 'jm'",
+	ylab="Eigen-value")
+plot(sp$rlapin,type="l",main="Eigen-values of inverse of Laplacian",
+	xlab="Wave index 'jm'",ylab="Eigen-value")
+plot(sp$rlapin,type="l",xlim=c(1,min(ndglg,20)),main="Eigen-values",
+	xlab="Wave index 'jm'",ylab="Eigen-value")
+par(op)
+
+cat("Vertical cubic weights (SL)\n")
 vintw = cuico(nd,nflevg)
 
 if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
@@ -511,16 +534,15 @@ nl3 = nflevg-3
 ntop = min(nl3,5)
 nmid = max(ntop,1+nl3/2)
 matplot(abs(vintw[,2:4]),1:nl3,type="o",lty=1,pch="-",
-	main=c("Cubic weight for vert. interp.","x=log(abs(w))"),xlab="Weight",ylab="Level",
-	ylim=c(nl3,1),log="x")
+	main="Cubic weight for vert. interp.",xlab="abs(Weight)",ylab="Level",ylim=c(nl3,1),
+	log="x")
 legend("bottomright",sprintf("w(,%d)",2:4),lty=1,col=1:3)
 matplot(abs(vintw[1:ntop,2:4]),1:ntop,type="o",lty=1,pch="-",
-	main=c("Weight at top levels","x=abs(w)"),xlab="Weight",ylab="Level",ylim=c(ntop,1))
+	main="Weight at top levels",xlab="abs(Weight)",ylab="Level",ylim=c(ntop,1))
 matplot(abs(vintw[ntop:nmid,2:4]),ntop:nmid,type="o",lty=1,pch="-",
-	main=c("Weight at mid levels","x=abs(w)"),xlab="Weight",ylab="Level",
-	ylim=c(nmid,ntop))
+	main="Weight at mid levels",xlab="abs(Weight)",ylab="Level",ylim=c(nmid,ntop))
 matplot(abs(vintw[nmid:nl3,2:4]),nmid:nl3,type="o",lty=1,pch="-",
-	main=c("Weight at bottom","x=abs(w)"),xlab="Weight",ylab="Level",ylim=c(nl3,nmid))
+	main="Weight at bottom",xlab="abs(Weight)",ylab="Level",ylim=c(nl3,nmid))
 par(op)
 
 if (length(unique(nlong)) == 1) {
