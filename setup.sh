@@ -63,6 +63,8 @@ fi
 file $fin | grep -q text
 grep -qi 'END OF SETUPS' $fin
 
+type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
+
 if [ -z "$fout" ]
 then
 	R --slave -f $diag/procmap.R --args $fin

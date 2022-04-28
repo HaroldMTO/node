@@ -80,6 +80,8 @@ xpdir=$(cd $loc > /dev/null && pwd)
 
 cd $temp > /dev/null
 
+type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
+
 while read -a ff
 do
 	echo "Line read: '${ff[*]}'"
@@ -95,7 +97,7 @@ do
 	mkdir -p $xpdir/$dd
 
 	R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=sp \
-		spre="spnorm .*t1\>:spnorm .*t1si"
+		spre="spnorm .*t1(tr)?\>:spnorm .*t1si"
 	convert Rplots.pdf spnorm.png
 
 	if grep -qE "gpnorm gmvt0" $xpdir/$fic
