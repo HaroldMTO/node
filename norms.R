@@ -182,7 +182,7 @@ hmax = as.numeric(getarg("hmax",args))
 splot = getarg("plot",args)
 if (is.null(splot)) splot = c("spec","gp")
 type = getarg("type",args)
-if (is.null(type)) type = "gfl"
+if (is.null(type)) type = "gpgfl"
 spre = getarg("spre",args)
 spref = getarg("spref",args)
 if (is.null(spref)) spref = "spnorm t0"
@@ -335,7 +335,15 @@ if (any(splot == "gp")) {
 	gpfre3 = "(ATND|ADIAB|CTY|SISL)_\\w+"
 	gpfre = paste(gpfre1,gpfre2,gpfre3,sep="|")
 
-	if (type == "gpgmv") {
+	if (type == "gpgfl") {
+		ind = grep("GPNORM +\\w+.* +AVERAGE",nd)
+		ind = ind[ind > i1]
+		indo = grep(sprintf("GPNORM +(%s|OUTPUT) +AVERAGE",gpfre),nd[ind],invert=TRUE)
+		gp1 = gpnorm(nd,lev,ind[indo])
+		gp1 = gp1[-1,,,,drop=FALSE]
+		gpl = list(gp1)
+		leg = "t0"
+	} else {
 		nl2 = 2+has.levels*nflevg
 		ind = grep(sprintf("GPNORM +(%s) +AVERAGE",gpfre),nd)
 		ind = ind[ind > i1]
@@ -363,14 +371,6 @@ if (any(splot == "gp")) {
 		}
 
 		gpl = gpl[! sapply(gpl,is.null)]
-	} else {
-		ind = grep("GPNORM +\\w+.* +AVERAGE",nd)
-		ind = ind[ind > i1]
-		indo = grep(sprintf("GPNORM +(%s|OUTPUT) +AVERAGE",gpfre),nd[ind],invert=TRUE)
-		gp1 = gpnorm(nd,lev,ind[indo])
-		gp1 = gp1[-1,,,,drop=FALSE]
-		gpl = list(gp1)
-		leg = "t0"
 	}
 
 	nfrgdi = getvar(".+ NFRGDI",nd)
@@ -389,7 +389,7 @@ if (any(splot == "gp")) {
 
 		for (i in seq((nf-1)%/%nr+1)-1) {
 			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
-			if (! hasx11) png(sprintf("gpnormv%d.png",i))
+			if (! hasx11) png(sprintf("%snormv%d.png",type,i))
 
 			par(mfrow=c(nr,nc),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 
@@ -442,7 +442,7 @@ if (any(splot == "gp")) {
 		nr = max(2,min(3,nf))
 		for (i in seq((nf-1)%/%nr+1)-1) {
 			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
-			if (! hasx11) png(sprintf("gpnorm%d.png",i))
+			if (! hasx11) png(sprintf("%snorm%d.png",type,i))
 
 			par(mfrow=c(nr,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 

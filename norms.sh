@@ -116,7 +116,7 @@ do
 	if grep -qE "gpnorm adiab" $xpdir/$fic
 	then
 		rm -f Rplots.pdf gpadiab.txt
-		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpgmv \
+		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpadiab \
 			gpref="gpnorm adiab" > gpadiab.txt
 		[ -s Rplots.pdf ] && convert Rplots.pdf gpadiabnorm.png
 	fi
@@ -124,7 +124,7 @@ do
 	if grep -qE "gpnorm zb2" $xpdir/$fic
 	then
 		rm -f Rplots.pdf gpsi.txt
-		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpgmv \
+		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpsi \
 			gpref="gpnorm zb2 cpg" gpre="gpnorm zb2 sl" > gpsi.txt
 		[ -s Rplots.pdf ] && convert Rplots.pdf gpsinorm.png
 	fi
@@ -156,7 +156,7 @@ do
 			if [ -s $pre.txt ]
 			then
 				echo -e "\t<td><pre>\n"
-				grep -ivE "Read|(GP|Spectral) norms" $pre.txt
+				grep -ivE "Read|no X11 device|(GP|Spectral) norms" $pre.txt
 				echo "</pre></td>"
 			fi
 
