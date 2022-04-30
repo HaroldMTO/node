@@ -12,7 +12,7 @@ Description:
 model forecast
 
 Usage:
-	plot.sh FILE [-o HTML] [-h]
+	plot.sh FILE -o HTML [-h]
 
 Options:
 	FILE: text file containing lines made of NODE file names and their description
@@ -20,10 +20,11 @@ Options:
 	-h: print this help and exit normally
 
 Details:
-	NODE file names must begin with 'node'. Description is what follows this name, \
-separated with ':'.
-	Plots are produced in directories named after NODE files, prefix 'node' being deleted.
-	An HTML output is produced, containing text and images from these NODE files.
+	NODE file names must begin with 'node' or 'NODE'. Description is what follows this \
+name, separated with ':'.
+	Plots are produced in directories named after NODE files, prefix 'node'/'NODE' being \
+deleted.
+	An HTML file is produced, containing text and images from these NODE files.
 "
 }
 
@@ -69,9 +70,12 @@ temp=$(mktemp -d -t plotXXX)
 
 trap 'rm -r $temp' 0
 
-if ! grep -Ei '^ *node\.?\w+ *: *\w' $fin > $temp/info.txt
+if grep -qEi '^ \w+:\w+:\w+ +STEP +[0-9]+' $fin
 then
-	echo "Error: pattern 'node...: ...' not found in $fin" >&2
+	echo "$fin: no description" > $temp/info.txt
+elif ! grep -Ei '^ *node\.?\w+ *: *\w' $fin > $temp/info.txt
+then
+	echo "Error: pattern 'nodeXXX: ...' not found in $fin" >&2
 	exit 1
 fi
 
@@ -90,39 +94,44 @@ do
 
 	tt=$(echo "${ff[*]}" | sed -re 's/.+: +//')
 
-	echo $fic | grep -qEi '\<node\.\w' || continue
+	echo $fic | grep -qEi '\<node\.?\w' || continue
 	grep -qEi '^ \w+:\w+:\w+ +STEP +[0-9]+' $xpdir/$fic || continue
 
-	dd=$(echo $fic | sed -re 's:^node::i')
+	dd=$(echo $fic | sed -re 's:^node\.?::i')
 	mkdir -p $xpdir/$dd
 
+	rm -f Rplots.pdf sp.txt
 	R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=sp \
-		spre="spnorm .*t1(tr)?\>:spnorm .*t1si"
-	convert Rplots.pdf spnorm.png
+		spre="spnorm .*t1(tr)?\>:spnorm .*t1si" > sp.txt
+	[ -s Rplots.pdf ] && convert Rplots.pdf spnorm.png
 
 	if grep -qE "gpnorm gmvt0" $xpdir/$fic
 	then
+		rm -f Rplots.pdf gpgmv
 		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpgmv \
-			gpre="gpnorm gmvt1 sl:gpnorm gmvt1 lag"
-		convert Rplots.pdf gpgmvnorm.png
+			gpre="gpnorm gmvt1 sl:gpnorm gmvt1 lag" > gpgmv.txt
+		[ -s Rplots.pdf ] && convert Rplots.pdf gpgmvnorm.png
 	fi
 
 	if grep -qE "gpnorm adiab" $xpdir/$fic
 	then
+		rm -f Rplots.pdf gpadiab.txt
 		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpgmv \
-			gpref="gpnorm adiab"
-		convert Rplots.pdf gpadiabnorm.png
+			gpref="gpnorm adiab" > gpadiab.txt
+		[ -s Rplots.pdf ] && convert Rplots.pdf gpadiabnorm.png
 	fi
 
 	if grep -qE "gpnorm zb2" $xpdir/$fic
 	then
+		rm -f Rplots.pdf gpsi.txt
 		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpgmv \
-			gpref="gpnorm zb2 cpg" gpre="gpnorm zb2 sl"
-		convert Rplots.pdf gpsinorm.png
+			gpref="gpnorm zb2 cpg" gpre="gpnorm zb2 sl" > gpsi.txt
+		[ -s Rplots.pdf ] && convert Rplots.pdf gpsinorm.png
 	fi
 
-	R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp
-	convert Rplots.pdf gpgflnorm.png
+	rm -f Rplots.pdf gpgfl.txt
+	R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp > gpgfl.txt
+	[ -s Rplots.pdf ] && convert Rplots.pdf gpgflnorm.png
 
 	mv *.png $xpdir/$dd
 
@@ -143,6 +152,13 @@ do
 				n=$((n+1))
 				printf "\t<td><img src=\"%s\"/></td>\n" $loc/$dd/$ficp
 			done
+
+			if [ -s $pre.txt ]
+			then
+				echo -e "\t<td><pre>\n"
+				grep -ivE "Read|(GP|Spectral) norms" $pre.txt
+				echo "</pre></td>"
+			fi
 
 			echo "</tr>"
 		} > $pre.html

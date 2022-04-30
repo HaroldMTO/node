@@ -16,7 +16,6 @@ install:
 	make $B/diag.sh
 	make $B/spnorm.sh
 	make $B/error.sh
-	make $B/procmap.sh
 	make $B/conf.sh
 	make $B/norms.sh
 	make $B/setup.sh
@@ -44,10 +43,6 @@ $B/spnorm.sh: spnorm.sh
 $B/error.sh: error.sh
 	sed -re "s:diags=.+:diags=$P:" error.sh > $B/error.sh
 	chmod a+x $B/error.sh
-
-$B/procmap.sh: procmap.sh
-	sed -re "s:diags=.+:diags=$P:" procmap.sh > $B/procmap.sh
-	chmod a+x $B/procmap.sh
 
 $B/conf.sh: conf.sh
 	sed -re "s:diags=.+:diags=$P:" conf.sh > $B/conf.sh
