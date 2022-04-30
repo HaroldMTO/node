@@ -96,7 +96,7 @@ else
 	date=$(grep -E 'NUDATE *=' $fic | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
 	res=$(grep -E 'NUDATE *=' $fic | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
 	base=$(printf "%s %dh" $date $((res/3600)))
-	sed -re "s:TAG NODE:$1:" -e "s:TAG BASE:$base:" -e "s:TAG DIR:$temp:g" \
+	sed -re "s:TAG NODE:$fin:" -e "s:TAG BASE:$base:" -e "s:TAG DIR:$temp:g" \
 		-e '/TAG MAP/r map.txt' $diag/setup.html > out.html
 
 	cd $OLDPWD

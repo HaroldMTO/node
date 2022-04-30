@@ -172,12 +172,24 @@ silev = function(nd,nflevg)
 
 cuico = function(nd,nflevg)
 {
-	ind = grep("JLEV +VCUICO\\>(\\(1)?",nd)
-	indi = ind+seq(nflevg-3)
 	snum = "-?\\d+\\.\\d+"
-	ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s) +(%s)",snum,snum,snum,snum),nd[indi])
-	vintw = matrix(as.numeric(sapply(regmatches(nd[indi],ire),"[",2:5)),nrow=4)
-	t(vintw)
+
+	ind = grep("JLEV +VCUICO\\>(\\(1)?",nd)
+	if (length(ind) == 1) {
+		indi = ind+seq(nflevg-3)
+		ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s) +(%s)",snum,snum,snum,snum),nd[indi])
+		vintw = matrix(as.numeric(sapply(regmatches(nd[indi],ire),"[",2:5)),nrow=4)
+		vintw = t(vintw)
+	} else {
+		vintw = matrix(nrow=nflevg-3,ncol=4)
+		for (i in seq(along=ind)) {
+			indi = ind[i]+seq(nflevg-3)
+			ire = regexec(sprintf(" *\\d+ +(%s)",snum),nd[indi])
+			vintw[,i] = as.numeric(sapply(regmatches(nd[indi],ire),"[",2))
+		}
+	}
+
+	vintw
 }
 
 getgem = function(nd)
@@ -412,6 +424,7 @@ matplot(cbind(ab[c("Bh","alpha")],eta=eta),type="o",lty=1,pch="|",main=tt,
 	xlab="Level",ylab=expression(eta))
 legend("topleft",c("Bh","Ah/Pref",expression(eta)),lty=1,pch="|",col=1:3,inset=.01)
 abline(h=0,col="darkgrey")
+if (! hasx11) invisible(dev.off())
 
 if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 if (! hasx11) png("levels.png")
@@ -427,6 +440,8 @@ abline(h=c(itropt,itropo),lty=2)
 plot(ab$Ah,0:nflevg,type="o",lty=1,pch="-",main=c("Coefficient A/Pref",ss),
 	xlab="alpha (=A/Pref)",ylab="Level",ylim=ylim,cex=1.5,yaxs="i")
 abline(h=c(itropt,itropo),lty=2)
+par(op)
+if (! hasx11) invisible(dev.off())
 
 if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 if (! hasx11) png("stdatm.png")
@@ -443,6 +458,7 @@ plot(std$rho,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Density of air"),
 	xlab="Density (-)",ylab="Z (mgp)",cex=1.5)
 abline(h=c(0,std$Z[c(itropt,itropo)]),lty=2)
 par(op)
+if (! hasx11) invisible(dev.off())
 
 cat("Vertical SI system and spectral horizontal diffusion\n")
 si = silev(nd,nflevg)
@@ -457,21 +473,24 @@ plot(si$sitlaf/100,1:nflevg,type="o",lty=1,pch="-",main="SITLAF: d(ln(P))/ln(P)"
 	xlab="Pressure (hPa)",ylab="Level",ylim=ylim,cex=1.5)
 plot(si$sidphi,1:nflevg,type="o",lty=1,pch="-",main="SIDPHI: diff. of geopotential",
 	xlab="Geopotential",ylab="Level",ylim=ylim,cex=1.5)
+par(op)
+if (! hasx11) invisible(dev.off())
 
 if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 if (! hasx11) png("sihd.png")
 op = par(mfrow=c(2,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-plot(si$pdi/100,1:nflevg,type="o",lty=1,pch="-",main="PDILEV: 1+7.5*(3-log10(P))",
+plot(si$pdi/100,1:nflevg,type="l",lty=1,main="PDILEV: 1+7.5*(3-log10(P))",
 	xlab="PDILEV (hPa)",ylab="Level",ylim=ylim,cex=1.5)
-plot(si$knshd,1:nflevg,type="o",lty=1,pch="-",main="KNSHD",
-	xlab="KNSHD",ylab="Level",ylim=ylim,cex=1.5)
-plot(si$rcordit,1:nflevg,type="o",lty=1,pch="-",main="RCORDIT (tropo)",
-	xlab="RCORDIT",ylab="Level",ylim=ylim,cex=1.5)
-plot(si$rcordih,1:nflevg,type="o",lty=1,pch="-",main="RCORDIH",
-	xlab="RCORDIH",ylab="Level",ylim=ylim,cex=1.5)
-plot(si$rcordif,1:nflevg,type="o",lty=1,pch="-",main="RCORDIF",
-	xlab="RCORDIF",ylab="Level",ylim=ylim,cex=1.5)
+plot(si$knshd,1:nflevg,type="l",lty=1,main="KNSHD",xlab="KNSHD",ylab="Level",ylim=ylim,
+	cex=1.5)
+plot(si$rcordit,1:nflevg,type="l",lty=1,main="RCORDIT (tropo)",xlab="RCORDIT",
+	ylab="Level",ylim=ylim,cex=1.5)
+plot(si$rcordih,1:nflevg,type="l",lty=1,main="RCORDIH",xlab="RCORDIH",ylab="Level",
+	ylim=ylim,cex=1.5)
+plot(si$rcordif,1:nflevg,type="l",lty=1,main="RCORDIF",xlab="RCORDIF",ylab="Level",
+	ylim=ylim,cex=1.5)
 par(op)
+if (! hasx11) invisible(dev.off())
 
 cat("Spectral and vertical partitionning\n")
 nprtrw = getvar("NPRTRW",nd)
@@ -494,6 +513,7 @@ plot(0:nm,sp$ndglu,type="l",main=c("Nb of longitudes per wave",ss),
 	xlab="Wave index 'jm'",ylab="Nb of longitudes",xaxt="n")
 axis(1,pretty((seq(along=sp$ndglu)-1)/8,8)*8)
 par(op)
+if (! hasx11) invisible(dev.off())
 
 if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 if (! hasx11) png("specproc.png")
@@ -507,22 +527,25 @@ plot(sp$nallms,type="h",main=c("Waves and W-set","'nallms'"),
 x = cumsum(sp$numpp)
 axis(1,c(x[1]/2,(x[-1]+x[-length(x)])/2),sprintf("%d (%d)",seq(sp$numpp),sp$numpp))
 par(op)
+if (! hasx11) invisible(dev.off())
 
 if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 if (! hasx11) png("vset.png")
 plot(sp$nbsetlev,1:nflevg,type="p",ylim=ylim,main="V-set and levels",xlab="V-set",
 	ylab="Level",pch="-")
+if (! hasx11) invisible(dev.off())
 
 if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 if (! hasx11) png("speclap.png")
 op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-plot(sp$rlapdi,type="l",main="Eigen-values of the Laplacian",xlab="Wave index 'jm'",
-	ylab="Eigen-value")
-plot(sp$rlapin,type="l",main="Eigen-values of inverse of Laplacian",
+plot(sp$rlapdi,type="l",main=c("Eigen-values of the Laplacian","'rlapdi'"),
 	xlab="Wave index 'jm'",ylab="Eigen-value")
-plot(sp$rlapin,type="l",xlim=c(1,min(ndglg,20)),main="Eigen-values",
+plot(sp$rlapin,type="l",main=c("Eigen-values of inverse of Laplacian","'rlapin'"),
+	xlab="Wave index 'jm'",ylab="Eigen-value")
+plot(sp$rlapin,type="l",xlim=c(1,min(ndglg,20)),main="First Eigen-values 'rlapin'",
 	xlab="Wave index 'jm'",ylab="Eigen-value")
 par(op)
+if (! hasx11) invisible(dev.off())
 
 cat("Vertical cubic weights (SL)\n")
 vintw = cuico(nd,nflevg)
@@ -544,6 +567,7 @@ matplot(abs(vintw[ntop:nmid,2:4]),ntop:nmid,type="o",lty=1,pch="-",
 matplot(abs(vintw[nmid:nl3,2:4]),nmid:nl3,type="o",lty=1,pch="-",
 	main="Weight at bottom",xlab="abs(Weight)",ylab="Level",ylim=c(nl3,nmid))
 par(op)
+if (! hasx11) invisible(dev.off())
 
 if (length(unique(nlong)) == 1) {
 	cat("--> regular Gaussian grid\n")
@@ -558,6 +582,7 @@ if (length(unique(nlong)) == 1) {
 	cat(par("mfrow"),"\n")
 	par(mfrow=c(1,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	plotnlon(nlong,nlon90,nlon45)
+	if (! hasx11) invisible(dev.off())
 }
 
 cat("Grid-point mapping wrt MPI tasks\n")
@@ -615,6 +640,7 @@ if (! is.null(tt)) {
 		ylab="Time (s)")
 	plot(its-1,tt$cpu[its],type="h",main="CPU-time",xlab="Time-step",ylab="Time (s)")
 	par(op)
+	if (! hasx11) invisible(dev.off())
 }
 
 if (nsttyp == 2) {
@@ -629,4 +655,5 @@ if (nsttyp == 2) {
 	map("world",xlim=xlim,ylim=ylim)
 	points(xp,yp,pch="+",col="red")
 	text(xp,yp,sprintf("pole (lat/long): %.3g %.3g",yp,xp),pos=3,col="red")
+	if (! hasx11) invisible(dev.off())
 }
