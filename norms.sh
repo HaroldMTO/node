@@ -129,9 +129,12 @@ do
 		[ -s Rplots.pdf ] && convert Rplots.pdf gpsinorm.png
 	fi
 
-	rm -f Rplots.pdf gpgfl.txt
-	R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp > gpgfl.txt
-	[ -s Rplots.pdf ] && convert Rplots.pdf gpgflnorm.png
+	if ! grep -qE "NGDITS *= *-?[12]\>" $xpdir/$fic
+	then
+		rm -f Rplots.pdf gpgfl.txt
+		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp > gpgfl.txt
+		[ -s Rplots.pdf ] && convert Rplots.pdf gpgflnorm.png
+	fi
 
 	mv *.png $xpdir/$dd
 

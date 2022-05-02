@@ -236,6 +236,8 @@ if (any(splot == "sp")) {
 	}
 
 	nfrsdi = getvar(".+ NFRSDI",nd)
+	nsdits = getvar("NSDITS",nd)
+	if (nsdits[1] != 0) cat("--> wrong times for SP plot (NSDITS != 0)\n")
 	istep = seq(1,nstop,by=nfrsdi)
 
 	nt = dim(sp1)[1]
@@ -260,6 +262,8 @@ if (any(splot == "sp")) {
 				plot(sp1[nt,,j],lev,type="l",ylim=ylim,xlab=spnoms[j],ylab="Level",main=tt[j])
 				abline(v=0,col="darkgrey",lty=2)
 			}
+
+			if (! hasx11) dev.off()
 		}
 	} else {
 		if (dim(sp1)[1] == 1) stop("1 time-step only (stop)\n")
@@ -325,6 +329,8 @@ if (any(splot == "sp")) {
 
 				mtext(tt,lty=2,cex=par("cex"))
 			}
+
+			if (! hasx11) dev.off()
 		}
 	}
 }
@@ -340,7 +346,8 @@ if (any(splot == "gp")) {
 		ind = ind[ind > i1]
 		indo = grep(sprintf("GPNORM +(%s|OUTPUT) +AVERAGE",gpfre),nd[ind],invert=TRUE)
 		gp1 = gpnorm(nd,lev,ind[indo])
-		gp1 = gp1[-1,,,,drop=FALSE]
+		if (dim(gp1)[1] > 1) gp1 = gp1[-1,,,,drop=FALSE]
+
 		gpl = list(gp1)
 		leg = "t0"
 	} else {
@@ -374,6 +381,8 @@ if (any(splot == "gp")) {
 	}
 
 	nfrgdi = getvar(".+ NFRGDI",nd)
+	ngdits = getvar("NGDITS",nd)
+	if (ngdits[1] != 0) cat("--> wrong times for GP plot (NGDITS != 0)\n")
 	istep = seq(1,nstop,by=nfrgdi)
 	nt = dim(gp1)[1]
 	if (length(istep) > nt) length(istep) = nt
@@ -400,6 +409,8 @@ if (any(splot == "gp")) {
 					abline(v=0,col="darkgrey",lty=2)
 				}
 			}
+
+			if (! hasx11) dev.off()
 		}
 	} else {
 		if (nt == 1) stop("1 time-step only (stop)\n")
@@ -474,6 +485,8 @@ if (any(splot == "gp")) {
 					matlines(ttime,gpl[[k]][,1,,j],lty=1:3,col=k)
 				}
 			}
+
+			if (! hasx11) dev.off()
 		}
 	}
 }
