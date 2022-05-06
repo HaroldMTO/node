@@ -93,7 +93,7 @@ type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
 
 while read -a ff
 do
-	echo "Line read: '${ff[*]}' - file: '${ff[0]}'"
+	echo "Line read: '${ff[*]}'"
 	fic=$(echo ${ff[0]} | sed -re 's/^\s*(node\.?\w+) *:?/\1/i')
 	desc=$(echo "${ff[*]}" | sed -re 's/.+: +//')
 	ls -L $xpdir/$fic > /dev/null
@@ -109,7 +109,7 @@ do
 	mkdir -p $xpdir/$dd
 	echo "--> output sent to $loc/$dd"
 
-	grep -q 'END CNT0' || echo "Warning: no 'END CNT0', program may crash" >&2
+	grep -q 'END CNT0' $xpdir/$fic || echo "Warning: no 'END CNT0', program may crash" >&2
 
 	rm -f sp.txt
 	R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=sp \
