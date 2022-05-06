@@ -138,15 +138,31 @@ silev = function(nd,nflevg)
 	sitlaf = as.numeric(sapply(regmatches(nd[il],ire),"[",2))
 	sidphi = as.numeric(sapply(regmatches(nd[il],ire),"[",5))
 
-	il = grep("(VERTICAL|Level) +.+ +EIGENVALUES",nd)[1]
-	il = seq(il+1,il+nflevg)
-	ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s)",Gnum,Gnum,Gnum),nd[il])
-	sivp = as.numeric(sapply(regmatches(nd[il],ire),"[",8))
+	i1 = grep("(VERTICAL|Level) +.+ +EIGENVALUES",nd)
+	if (length(i1) == 1) {
+		il = seq(i1+1,i1+nflevg)
+		ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s)",Gnum,Gnum,Gnum),nd[il])
+		sivp = as.numeric(sapply(regmatches(nd[il],ire),"[",8))
+	} else {
+		sivp = rep(0,nflevg)
+	}
 
-	i1 = grep("PDILEV",nd)
-	i2 = grep("SUE?HDVPN",nd)[1]
-	il = seq(i1+1,i2-1)
-	pdi = numlines(nd[il])
+	i1 = grep("\\<PDILEV",nd)
+	if (length(i1) == 1) {
+		i2 = grep("SUE?HDVPN",nd)[1]
+		il = seq(i1+1,i2-1)
+		pdi = numlines(nd[il])
+	} else if (length(i1) > 1) {
+		il = seq(i1[1]+1,i1[2]-1)
+		pdi = numlines(nd[il])
+		i1 = grep("PDILEVS\\>",nd)
+		i2 = grep("SUE?HDVPN",nd)[1]
+		il = seq(i1+1,i2-1)
+		pdis = numlines(nd[il])
+	} else {
+		pdi = rep(0,nflevg)
+		pdis = rep(0,nflevg)
+	}
 
 	i1 = grep("KNSHD *:",nd)
 	i2 = grep("^ *SUHDF",nd)
@@ -160,7 +176,7 @@ silev = function(nd,nflevg)
 	i1 = grep("SURCORDI",nd)
 	i2 = grep("Set up relaxation",nd,ignore.case=TRUE)
 	ind = seq(i1+1,i2-1)
-	ic = grep("RCORDI",nd[ind])
+	ic = grep("\\<RCORDI",nd[ind])
 	noms = sub("^ *(RCORDI\\w+).*","\\1",nd[ind[ic]])
 	stopifnot(all(noms == sprintf("RCORDI%s",c("T","H","F"))))
 
@@ -171,8 +187,8 @@ silev = function(nd,nflevg)
 	il = ind[-(1:ic[3])]
 	rcordif = numlines(nd[il])
 
-	data.frame(sivp=sivp,sitlaf=sitlaf,sidphi=sidphi,pdi=pdi,knshd=knshd,rcordit=rcordit,
-		rcordif=rcordif,rcordih=rcordih)
+	data.frame(sivp=sivp,sitlaf=sitlaf,sidphi=sidphi,pdi=pdi,pdis=pdis,knshd=knshd,
+		rcordit=rcordit,rcordif=rcordif,rcordih=rcordih)
 }
 
 cuico = function(nd,nflevg)
@@ -484,7 +500,8 @@ pngalt("sipre.png")
 op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 ylim = c(nflevg,1)
 plot(si$sivp,1:nflevg,type="o",lty=1,pch="-",main="SIVP: vert. modes (= freq.)",
-	xlab="Mode",ylab="Level",ylim=ylim,cex=1.5,log="x")
+	xlab="Mode",ylab="Level",ylim=ylim,cex=1.5)
+if (all(si$sivp == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
 plot(si$sitlaf/100,1:nflevg,type="o",lty=1,pch="-",main="SITLAF: d(ln(P))/ln(P)",
 	xlab="Pressure (hPa)",ylab="Level",ylim=ylim,cex=1.5)
 plot(si$sidphi,1:nflevg,type="o",lty=1,pch="-",main="SIDPHI: diff. of geopotential",
@@ -495,14 +512,21 @@ pngalt("sihd.png")
 op = par(mfrow=c(2,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 plot(si$pdi/100,1:nflevg,type="l",lty=1,main="PDILEV: 1+7.5*(3-log10(P))",
 	xlab="PDILEV (hPa)",ylab="Level",ylim=ylim,cex=1.5)
+if (all(si$pdi == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
+plot(si$pdis/100,1:nflevg,type="l",lty=1,main="PDILEVS: cf PDILEV)",
+	xlab="PDILEVS (hPa)",ylab="Level",ylim=ylim,cex=1.5)
 plot(si$knshd,1:nflevg,type="l",lty=1,main="KNSHD",xlab="KNSHD",ylab="Level",ylim=ylim,
 	cex=1.5)
+if (all(si$knshd == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
 plot(si$rcordit,1:nflevg,type="l",lty=1,main="RCORDIT (tropo)",xlab="RCORDIT",
 	ylab="Level",ylim=ylim,cex=1.5)
+if (all(si$rcordit == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
 plot(si$rcordih,1:nflevg,type="l",lty=1,main="RCORDIH",xlab="RCORDIH",ylab="Level",
 	ylim=ylim,cex=1.5)
+if (all(si$rcordih == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
 plot(si$rcordif,1:nflevg,type="l",lty=1,main="RCORDIF",xlab="RCORDIF",ylab="Level",
 	ylim=ylim,cex=1.5)
+if (all(si$rcordif == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
 pngoff(op)
 
 cat("Spectral and vertical partitionning\n")
@@ -532,6 +556,7 @@ pr = unlist(lapply(seq(along=sp$numpp),function(i) rep(i,each=sp$numpp[i])))
 np = length(sp$nprocm)-1
 plot(0:np,sp$nprocm,type="h",main=c("W-set and waves","'nprocm'"),xlab="Wave index 'jm'",
 	ylab="W-set index")
+if (any(sp$nprocm == 0)) text(np/2,max(sp$nprocm)/2,"NPROCM not fully decoded",.5,col=2)
 plot(sp$nallms,type="h",main=c("Waves and W-set","'nallms'"),
 	xlab="W-set index (nb of waves 'numpp')",ylab="Wave index 'jm'",lwd=1.5,
 	col=(pr-1)%%8+1,xaxt="n")
@@ -539,7 +564,7 @@ x = cumsum(sp$numpp)
 axis(1,c(x[1]/2,(x[-1]+x[-length(x)])/2),sprintf("%d (%d)",seq(sp$numpp),sp$numpp))
 if (any(duplicated(sp$nallms))) {
 	stopifnot(all(! duplicated(sp$nallms[sp$nallms!=0])))
-	text(nm/2,.45*nm,"NALLMS not fully decoded ('*' present)",.5)
+	text(nm/2,nm/2,"NALLMS not fully decoded",.5,col=2)
 }
 pngoff(op)
 

@@ -152,7 +152,7 @@ spnorm = function(nd,lev,ind)
 	ip = grep("LOG\\(P/P_hyd\\)|d4",noms,invert=TRUE)
 	noms[ip] = abbreviate(noms[ip])
 
-	istep = sub("NORMS AT NSTEP CNT4( \\(PREDICTOR\\))? +(\\d+)","\\2",nd[ind-1])
+	istep = sub(" *NORMS AT NSTEP CNT4( \\(PREDICTOR\\))? +(\\d+)","\\2",nd[ind-1])
 	dimnames(spn) = list(istep,lev,noms)
 
 	spn
@@ -168,14 +168,15 @@ indexpand = function(ind,nf,nl)
 	rep(ind,each=nf)+(seq(nf)-1)*nl2
 }
 
-hasx11 = capabilities("X11")
+args = commandArgs(trailingOnly=TRUE)
+
+hasx11 = is.null(getarg("png",args)) && capabilities("X11")
 ask = hasx11 && interactive()
 if (! hasx11) cat("--> no X11 device, sending plots to PNG files\n")
 
 xaxis = data.frame(unit=c(1,3600,86400),label=sprintf("fc time (%s)",c("s","h","days")),
 	mindiff=c(0,86400,6*86400),freq=c(6,6,1))
 
-args = commandArgs(trailingOnly=TRUE)
 lev = as.integer(getarg("lev",args))
 hmin = as.numeric(getarg("hmin",args))
 hmax = as.numeric(getarg("hmax",args))
@@ -216,7 +217,10 @@ i1 = grep("START CNT4",nd)
 if (any(splot == "sp")) {
 	ind = grep("SPECTRAL NORMS",nd)
 	ind = ind[ind > i1]
+	# ind2: for corrector (one line may be interleaved)
 	ind1 = grep(sub("spnorm t0","NORMS AT NSTEP CNT4",spref),nd[ind-1])
+	ind2 = grep(sub("spnorm t0","NORMS AT NSTEP CNT4",spref),nd[ind-2])
+	if (length(ind2) > 0) ind1 = sort(c(ind1,ind2))
 	sp1 = spnorm(nd,lev,ind[ind1[-1]])
 	spnoms = dimnames(sp1)[[3]]
 	spl = list(sp1)
@@ -237,7 +241,7 @@ if (any(splot == "sp")) {
 
 	nfrsdi = getvar(".+ NFRSDI",nd)
 	nsdits = getvar("NSDITS",nd)
-	if (nsdits[1] != 0) cat("--> wrong times for SP plot (NSDITS != 0)\n")
+	if (nsdits[1] != 0) message("Warning: possible crash for SP plot (NSDITS != 0)")
 	istep = seq(1,nstop,by=nfrsdi)
 
 	nt = dim(sp1)[1]
@@ -382,7 +386,7 @@ if (any(splot == "gp")) {
 
 	nfrgdi = getvar(".+ NFRGDI",nd)
 	ngdits = getvar("NGDITS",nd)
-	if (ngdits[1] != 0) cat("--> wrong times for GP plot (NGDITS != 0)\n")
+	if (ngdits[1] != 0) message("Warning: possible crash for GP plot (NGDITS != 0)")
 	istep = seq(1,nstop,by=nfrgdi)
 	nt = dim(gp1)[1]
 	if (length(istep) > nt) length(istep) = nt

@@ -60,7 +60,8 @@ then
 	exit 1
 fi
 
-file $fin | grep -q text
+ls -L $fin > /dev/null
+file -L $fin | grep -q text
 grep -qi 'END OF SETUPS' $fin
 
 type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
@@ -69,22 +70,20 @@ if [ -z "$fout" ]
 then
 	R --slave -f $diag/procmap.R --args $fin
 else
-	loc=$(dirname $fin)
-	xpdir=$(cd $loc > /dev/null && pwd)
-	fic=$xpdir/$(basename $fin)
-
-	if echo $fic | grep -qEi '\<node\w'
+	if echo $fin | grep -qEi '(.+/)?\<node\.?\w+'
 	then
-		temp=$(echo $fic | sed -re 's:\<node::i')
-		mkdir -p $temp
+		dd=$(echo $fin | sed -re 's:(.+/)?\<node\.?(\w+):\1\2:i')
+		mkdir -p $dd
 	else
-		temp=$(mktemp -d -p $loc setupXXX)
+		loc=$(dirname $fin)
+		dd=$(mktemp -d -p $loc setupXXX)
 	fi
 
-	echo "--> output sent to $temp"
-	cd $temp > /dev/null
+	cd $dd > /dev/null
+	echo "--> output sent to $dd"
 
-	R --slave -f $diag/procmap.R --args $fic png > out.txt
+	fic=$(basename $fin)
+	R --slave -f $diag/procmap.R --args ../$fic png > out.txt
 
 	{
 		echo "<pre>"
@@ -93,12 +92,11 @@ else
 		echo "</pre>"
 	} > map.txt
 
-	date=$(grep -E 'NUDATE *=' $fic | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
-	res=$(grep -E 'NUDATE *=' $fic | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
-	base=$(printf "%s %dh" $date $((res/3600)))
-	sed -re "s:TAG NODE:$fin:" -e "s:TAG BASE:$base:" -e "s:TAG DIR:$temp:g" \
-		-e '/TAG MAP/r map.txt' $diag/setup.html > out.html
+	cd $OLDPWD > /dev/null
 
-	cd $OLDPWD
-	mv $temp/out.html $fout
+	date=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
+	res=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
+	base=$(printf "%s %dh" $date $((res/3600)))
+	sed -re "s:TAG NODE:$fin:" -e "s:TAG BASE:$base:" -e "s:TAG DIR:$dd:g" \
+		-e "/TAG MAP/r $dd/map.txt" $diag/setup.html > $fout
 fi
