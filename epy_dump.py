@@ -57,49 +57,53 @@ epygram.init_env()
 print("Reading file "+fname)
 a = epygram.formats.resource(fname,"r")
 
-geom = a.geometry
+if a.format != "GRIB":
+	geom = a.geometry
 
-islam = geom.name == "lambert" or geom.name == "mercator"
-if islam:
-	print("Geometry:",geom.name,"(Limited Area)")
-else:
-	print("Geometry::",geom.name,"(global)")
-	if geom.name != "gauss" and geom.name != "reduced_gauss" and geom.name != "rotated_reduced_gauss":
-		exit("error unknown geom name")
+	islam = geom.name in ("lambert","mercator","regular_lonlat")
+	if islam:
+		print("Geometry:",geom.name,"(Limited Area)")
+	else:
+		print("Geometry::",geom.name,"(global)")
+		if geom.name not in ("gauss","reduced_gauss","rotated_reduced_gauss"):
+			exit("error unknown geom name")
 
-grid = geom.get_lonlat_grid()
-longs = grid[0]
-lats = grid[1]
-lats = lats.compressed()
-longs = longs.compressed()
-if islam:
-	nlat = geom.dimensions["Y"]
-	nlon = geom.dimensions["X"]
-else:
-	nlon = geom.dimensions["lon_number_by_lat"]
+	grid = geom.get_lonlat_grid()
+	longs = grid[0]
+	lats = grid[1]
+	lats = lats.compressed()
+	longs = longs.compressed()
+	if islam:
+		nlat = geom.dimensions["Y"]
+		nlon = geom.dimensions["X"]
+	else:
+		nlon = geom.dimensions["lon_number_by_lat"]
 
-vv = geom.vcoordinate
-vab = vv.grid["gridlevels"]
-Ai = numpy.empty(len(vab))
-Bi = numpy.empty(len(vab))
-for i,vi in enumerate(vab):
-	Ai[i] = vi[1]["Ai"]
-	Bi[i] = vi[1]["Bi"]
+	vv = geom.vcoordinate
+	if len(vv.levels) == 1:
+		exit("one level only")
 
-spgeom = a.spectral_geometry
-tc = spgeom.truncation
-if spgeom.space == "legendre" and tc["shape"] == "triangular":
-	nwave = tc["max_zonal_wavenumber_by_lat"]
-	# last 0 is for recognition of global grid vs LAM grid
-	dims = len(nlon),len(nwave),len(vv.levels),geom.gridpoints_number,0
-	print("Dimensions (gaussian lats, waves, levels, grid-points):",dims)
-elif spgeom.space == "bi-fourier" and tc["shape"] == "elliptic":
-	nwavex = tc["in_X"]
-	nwavey = tc["in_Y"]
-	dims = nlat,nlon,nwavex,nwavey,len(vv.levels)
-	print("Dimensions (Lambert lats and longs, X and Y waves, levels):",dims)
-else:
-	exit("unknown space of spectral geometry")
+	vab = vv.grid["gridlevels"]
+	Ai = numpy.empty(len(vab))
+	Bi = numpy.empty(len(vab))
+	for i,vi in enumerate(vab):
+		Ai[i] = vi[1]["Ai"]
+		Bi[i] = vi[1]["Bi"]
+
+	spgeom = a.spectral_geometry
+	tc = spgeom.truncation
+	if spgeom.space == "legendre" and tc["shape"] == "triangular":
+		nwave = tc["max_zonal_wavenumber_by_lat"]
+		# last 0 is for recognition of global grid vs LAM grid
+		dims = len(nlon),len(nwave),len(vv.levels),geom.gridpoints_number,0
+		print("Dimensions (gaussian lats, waves, levels, grid-points):",dims)
+	elif spgeom.space == "bi-fourier" and tc["shape"] == "elliptic":
+		nwavex = tc["in_X"]
+		nwavey = tc["in_Y"]
+		dims = nlat,nlon,nwavex,nwavey,len(vv.levels)
+		print("Dimensions (Lambert lats and longs, X and Y waves, levels):",dims)
+	else:
+		exit("unknown space of spectral geometry")
 
 con = None
 if fbin != "":
@@ -157,8 +161,32 @@ elif tag != "":
 		numpy.array(nf).tofile(con)
 
 	finfo = True
+	ginfo = True
 	for j in fnoms.argsort():
 		ff = fields[j]
+
+		if a.format == "GRIB":
+			geom = ff.geometry
+			base = ff.validity.getbasis()
+			step = ff.validity.term()
+			if ggeom is None:
+				ggeom = geom
+				gbase = base
+			elif geom is not ggeom or base != gbase:
+				next
+
+			dims = (geom.dimensions["X"],geom.dimensions["Y"],0,0,1)
+			if ginfo: print(dims)
+
+			bb = numpy.array(base.timestamp())
+			ss = numpy.array(step.total_seconds())
+			if con != None:
+				if ginfo:
+					dims.tofile(con)
+					bb.tofile(con)
+				ss.tofile(con)
+
+			ginfo = False
 
 		if ff.spectral:
 			splen = len(ff.data)
@@ -171,7 +199,8 @@ elif tag != "":
 				print("Gridpoint size:",ff.data.size)
 				finfo = False
 
-		data = ff.data.compressed()
+		data = ff.data
+		if (not islam): data = data.compressed()
 
 		if con != None:
 			data.tofile(con)
