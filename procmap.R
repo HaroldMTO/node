@@ -10,11 +10,19 @@ getvar = function(var,nd,sep="=")
 longend = function(nd,ndglg)
 {
 	ij = grep("\\( *JGL,NLOENG *\\)",nd)
-	is = grep("Set up transforms",nd)
+	if (length(ij) == 0) {
+		ij = grep("\\( *JGL,NLOENG,NMENG *\\)",nd)
+		is = grep("\\(JM,NDGLU\\)",nd)
+		ind = seq(ij+1,is-1)
+		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
+		nloeng = as.integer(gsub("\\( *-?\\d+ +(\\d+) +\\d+\\)","\\1",s))
+	} else {
+		is = grep("Set up transforms",nd)
+		ind = seq(ij+1,is-1)
+		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
+		nloeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
+	}
 
-	ind = seq(ij+1,is-1)
-	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
-	nloeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
    stopifnot(length(nloeng)%%2 == 0)
 
    off = (length(nloeng)-ndglg)/2
@@ -59,16 +67,26 @@ spec = function(nd,ndglg)
 	ind = seq(i1+1,i2-1)
 	nbsetlev = intlines(nd[ind])
 
-	i1 = grep("^ *YDLAP%MYMS",nd)
-	i2 = grep("^ *(NASM0i|YDLAP%NASN0) *$",nd)
-	ind = seq(i1+1,i2-1)
+	i1 = grep("^ *(YDLAP%)?MYMS",nd)
+	i2 = grep("^ *(NASM0|YDLAP%NASN0|NALLMS) *$",nd)
+	i2 = i2[i2 > i1]
+	ind = seq(i1+1,i2[1]-1)
 	myms = intlines(nd[ind])
 
 	ij = grep("\\( *JGL,NMENG *\\)",nd)
-	is = grep("\\( *JM,NDGLU *\\)",nd)
-	ind = seq(ij+1,is-1)
-	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
-	nmeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
+	if (length(ij) == 0) {
+		ij = grep("\\( *JGL,NLOENG,NMENG *\\)",nd)
+		is = grep("\\(JM,NDGLU\\)",nd)
+		ind = seq(ij+1,is-1)
+		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
+		nmeng = as.integer(gsub("\\( *-?\\d+ +\\d+ +(\\d+)\\)","\\1",s))
+	} else {
+		is = grep("\\( *JM,NDGLU *\\)",nd)
+		ind = seq(ij+1,is-1)
+		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
+		nmeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
+	}
+
 	off = (length(nmeng)-ndglg)/2
 	nmeng = nmeng[off+seq(ndglg%/%2)]
 
@@ -86,7 +104,7 @@ spec = function(nd,ndglg)
 
 	i1 = grep("^ *EIGEN-VALUES OF THE LAPLACIAN",nd)
 	i2 = grep("^ *EIGEN-VALUES OF ITS INVERSE",nd)
-	i3 = grep("^ *(YDLAP%NASM0G|YDLEP%NESM0G)",nd)
+	i3 = grep("^ *((YDLAP%)?NASM0G|YDLEP%NESM0G)",nd)
 	ind = seq(i1+1,i2-1)
 	rlapdi = numlines(nd[ind])
 
@@ -113,7 +131,7 @@ stdatm = function(nd,nflevg)
 
 abh = function(nd,nflevg)
 {
-	ih = grep("A and B at half levels",nd)
+	ih = grep("A and B (at half levels|on half layers)",nd)
 	ind = ih+1+seq(nflevg+1)
 	snum = "-?\\d+\\.\\d+"
 	ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s)",snum,snum,snum),nd[ind])
@@ -152,6 +170,7 @@ silev = function(nd,nflevg)
 		i2 = grep("SUE?HDVPN",nd)[1]
 		il = seq(i1+1,i2-1)
 		pdi = numlines(nd[il])
+		pdis = rep(0,nflevg)
 	} else if (length(i1) > 1) {
 		il = seq(i1[1]+1,i1[2]-1)
 		pdi = numlines(nd[il])
@@ -175,6 +194,7 @@ silev = function(nd,nflevg)
 
 	i1 = grep("SURCORDI",nd)
 	i2 = grep("Set up relaxation",nd,ignore.case=TRUE)
+	if (length(i2) == 0) i2 = grep("NSLDIMK *=",nd,ignore.case=TRUE)
 	ind = seq(i1+1,i2-1)
 	ic = grep("\\<RCORDI",nd[ind])
 	noms = sub("^ *(RCORDI\\w+).*","\\1",nd[ind[ic]])
@@ -211,6 +231,19 @@ cuico = function(nd,nflevg)
 	}
 
 	vintw
+}
+
+weno = function(nd,nflevg)
+{
+	snum = "-?\\d+\\.\\d+"
+
+	ind = grep("GAMMA_WENO ",nd)
+	if (length(ind) == 0) return(NULL)
+
+	indi = ind+seq(nflevg-4)
+	ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s)",snum,snum,snum),nd[indi])
+	gamma = matrix(as.numeric(sapply(regmatches(nd[indi],ire),"[",2:4)),nrow=3)
+	t(gamma)
 }
 
 getgem = function(nd)
@@ -398,7 +431,7 @@ pngalt = function(...)
 pngoff = function(op)
 {
 	if (! hasx11) {
-		dev.off()
+		invisible(dev.off())
 	} else if (! missing(op)) {
 		par(op)
 	}
@@ -414,7 +447,7 @@ if (! hasx11) cat("--> no X11 device, sending plots to PNG files\n")
 nd = readLines(args[1])
 
 nproc = getvar("NPROC",nd)
-nprgpns = getvar("NPRGPNS",nd)
+nprgpns = getvar(".*\\<NPRGPNS",nd)
 ndglg = getvar("NDGLG",nd)
 ndgnh = ndglg%/%2
 ndlon = getvar("NDLON",nd)
@@ -424,8 +457,8 @@ nlong = longend(nd,ndglg)
 
 cat("Write geometry namelist for FPOS jobs\n")
 gem = getgem(nd)
-nsmax= getvar("NSMAX",nd)
-nmsmax= getvar("NMSMAX",nd)
+nsmax = getvar("NSMAX",nd)
+nmsmax = getvar("NSMAX.+NMSMAX",nd)
 nsttyp = getvar("NSTTYP",nd)
 if (length(nsttyp) == 0) nsttyp = getvar(".+ NSTTYP",nd)
 nhtyp = getvar("NHTYP",nd)
@@ -531,9 +564,20 @@ pngoff(op)
 
 cat("Spectral and vertical partitionning\n")
 nprtrw = getvar("NPRTRW",nd)
-nprtrn = getvar("NPRTRN",nd)
-nprtrns = getvar("NPRTRNS",nd)
-nprtrv = getvar("NPRTRV",nd)
+if (length(nprtrw) == 0) {
+	nprtrw = getvar(".*\\<NPRTRW",nd)
+	if (length(nprtrw) == 0) {
+		i1 = grep("^.+ NPRTRW *= *$",nd)
+		nprtrw = getvar(".*\\<NPRTRW",paste(nd[i1+0:1],collapse=""))
+	}
+	nprtrn = getvar(".*\\<NPRTRN",nd)
+	nprtrns = getvar(".*\\<NPRTRNS",nd)
+	nprtrv = getvar(".*\\<NPRTRV",nd)
+} else {
+	nprtrn = getvar("NPRTRN",nd)
+	nprtrns = getvar("NPRTRNS",nd)
+	nprtrv = getvar("NPRTRV",nd)
+}
 
 sp = spec(nd,ndglg)
 nm = length(sp$ndglu)-1
@@ -585,6 +629,7 @@ pngoff(op)
 
 cat("Vertical cubic weights (SL)\n")
 vintw = cuico(nd,nflevg)
+gamma = weno(nd,nflevg)
 
 pngalt("vintw.png")
 op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
@@ -602,6 +647,18 @@ matplot(abs(vintw[ntop:nmid,2:4]),ntop:nmid,type="o",lty=1,pch="-",
 matplot(abs(vintw[nmid:nl3,2:4]),nmid:nl3,type="o",lty=1,pch="-",
 	main="Weight at bottom",xlab="abs(Weight)",ylab="Level",ylim=c(nl3,nmid))
 pngoff(op)
+
+if (! is.null(gamma)) {
+	pngalt("weno.png")
+	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+
+	for (i in 1:3) {
+		tt = sprintf("WENO weights %d",i)
+		plot(gamma[,i],2:nl3,type="o",lty=1,pch="-",main=tt,xlab="Gamma",ylab="Level",ylim=c(nl3,2))
+	}
+
+	pngoff(op)
+}
 
 if (length(unique(nlong)) == 1) {
 	cat("--> regular Gaussian grid\n")
