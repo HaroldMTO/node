@@ -1,4 +1,20 @@
 Gnum = "[-+]?[0-9][-+0-9.E]+[0-9]"
+Gnum = "-?\\d*\\.\\d+([eE]?[-+]?\\d+)?\\>"
+Gint = "-?\\d+\\>"
+
+getarg = function(x,args)
+{
+	ind = grep(sprintf("\\<%s=",x),args)
+	if (length(ind) == 0) return(NULL)
+
+	strsplit(sub(sprintf("\\<%s=",x),"",args[ind]),split=":")[[1]]
+}
+
+getvar = function(var,nd,sep="=")
+{
+	re = sprintf("^ *\\<%s *%s *(%s|%s).*",var,sep,Gint,Gnum)
+	unique(as.numeric(gsub(re,"\\1",grep(re,nd,value=TRUE))))
+}
 
 timestep = function(nd)
 {
@@ -122,10 +138,16 @@ plott = function(xaxis,col=par("col"),reg,...)
 
 args = commandArgs(trailingOnly=TRUE)
 lev = NULL
-ind = grep("lev=\\d+",args)
+ind = grep("lev=",args)
 if (length(ind) > 0) {
+	if (length(grep("lev=\\d+",args)) == 0) stop("level is not a positive integer value")
+
 	lev = strsplit(sub("lev=","",args[ind[1]]),split=":")[[1]]
 	lev = as.integer(lev)
+	if (length(lev) > 1) {
+		warning("several levels in 'lev=...', only 1st one will be used")
+		lev = lev[1]
+	}
 }
 
 time = NULL
@@ -142,6 +164,22 @@ if (regexpr("\\.txt",files[1]) > 0) {
 	info = read.table(files[1],header=TRUE)
 } else {
 	info = data.frame(file=files,legend=letters[seq(along=files)],col=seq(along=files))
+}
+
+for (i in seq(along=info$file)) {
+	cat(". checking file",info$file[i],"\n")
+	if (! file.exists(info$file[i])) stop("file not found")
+
+	nd = readLines(info$file[i])
+
+	if (length(grep("SPECTRAL NORMS",nd)) == 0) stop("no spectral norms")
+
+	if (! is.null(lev)) {
+		nflevg = getvar("NFLEVG",nd)
+		has.levels = getvar("NSPPR",nd) > 0
+		if (! has.levels) stop("no levels in norms (NSPPR=0)")
+		if (lev > nflevg) stop("level asked for > NFLEVG")
+	}
 }
 
 sp = lapply(info$file,spnorm,time=time,nmax=nmax,lev=lev)
