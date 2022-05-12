@@ -1,6 +1,6 @@
 #!/bin/sh
 
-diag=~/util/diags
+diags=~/util/diags
 
 set -e
 
@@ -112,34 +112,34 @@ do
 	grep -q 'END CNT0' $xpdir/$fic || echo "Warning: no 'END CNT0', program may crash" >&2
 
 	rm -f sp.txt
-	R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=sp \
+	R --slave -f $diags/norms.R --args $xpdir/$fic lev=0 plot=sp \
 		spre="spnorm .*t1(tr)?\>:spnorm .*t1si" png=png > sp.txt
 
 	if grep -qE "gpnorm gmvt0" $xpdir/$fic
 	then
 		rm -f gpgmv
-		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpgmv \
+		R --slave -f $diags/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpgmv \
 			gpre="gpnorm gmvt1 sl:gpnorm gmvt1 lag" png=png > gpgmv.txt
 	fi
 
 	if grep -qE "gpnorm adiab" $xpdir/$fic
 	then
 		rm -f gpadiab.txt
-		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpadiab \
+		R --slave -f $diags/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpadiab \
 			gpref="gpnorm adiab" png=png > gpadiab.txt
 	fi
 
 	if grep -qE "gpnorm zb2" $xpdir/$fic
 	then
 		rm -f gpsi.txt
-		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpsi \
+		R --slave -f $diags/norms.R --args $xpdir/$fic lev=0 plot=gp type=gpsi \
 			gpref="gpnorm zb2 cpg" gpre="gpnorm zb2 sl" png=png > gpsi.txt
 	fi
 
 	if ! grep -qE "NGDITS *= *-?[12]\>" $xpdir/$fic
 	then
 		rm -f gpgfl.txt
-		R --slave -f $diag/norms.R --args $xpdir/$fic lev=0 plot=gp png=png > gpgfl.txt
+		R --slave -f $diags/norms.R --args $xpdir/$fic lev=0 plot=gp png=png > gpgfl.txt
 	fi
 
 	mv *.png $xpdir/$dd
@@ -181,10 +181,10 @@ do
 	sed -re "s:TAG NODE:$fic:" -e "s:TAG BASE:$base:" -e "s:TAG DESC:$desc:" \
 		-e '/TAG SP/r sp.html' -e '/TAG GPGMV/r gpgmv.html' -e '/TAG GPGFL/r gpgfl.html' \
 		-e '/TAG GPADIAB/r gpadiab.html' -e '/TAG GPSI/r gpsi.html' \
-		$diag/img.html >> img.html
+		$diags/img.html >> img.html
 done < info.txt
 
-sed -re '/TAG IMG/r img.html' $diag/norms.html > out.html
+sed -re '/TAG IMG/r img.html' $diags/norms.html > out.html
 
 cd $OLDPWD > /dev/null
 mv $temp/out.html $fout

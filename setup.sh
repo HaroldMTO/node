@@ -1,6 +1,6 @@
 #!/bin/sh
 
-diag=~/util/diags
+diags=~/util/diags
 
 set -e
 
@@ -68,7 +68,7 @@ type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
 
 if [ -z "$fout" ]
 then
-	R --slave -f $diag/procmap.R --args $fin
+	R --slave -f $diags/procmap.R --args $fin
 else
 	if echo $fin | grep -qEi '(.+/)?\<node\.?\w+'
 	then
@@ -83,7 +83,7 @@ else
 	echo "--> output sent to $dd"
 
 	fic=$(basename $fin)
-	R --slave -f $diag/procmap.R --args ../$fic png > out.txt
+	R --slave -f $diags/procmap.R --args ../$fic png > out.txt
 
 	{
 		echo "<pre>"
@@ -98,5 +98,5 @@ else
 	res=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
 	base=$(printf "%s %dh" $date $((res/3600)))
 	sed -re "s:TAG NODE:$fin:" -e "s:TAG BASE:$base:" -e "s:TAG DIR:$dd:g" \
-		-e "/TAG MAP/r $dd/map.txt" $diag/setup.html > $fout
+		-e "/TAG MAP/r $dd/map.txt" $diags/setup.html > $fout
 fi
