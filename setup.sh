@@ -68,6 +68,7 @@ type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
 
 if [ -z "$fout" ]
 then
+	echo "--> output sent to Rplots.pdf or PNG files"
 	R --slave -f $diags/procmap.R --args $fin
 else
 	if echo $fin | grep -qEi '(.+/)?\<node\.?\w+'
