@@ -13,6 +13,7 @@ Usage:
 
 Arguments:
 	PATH: path to where to find reference files
+	HTML: path to output files (graphics and HTML files)
 	-h: print this help and exits normally
 
 Details:
@@ -32,8 +33,9 @@ fi
 
 conf="config"
 fic=""
-lev=0
+lev=""
 par=""
+graph=1
 html=""
 
 while [ $# -ne 0 ]
@@ -63,6 +65,9 @@ do
 			html=$2
 			shift
 			;;
+		-nograph)
+			graph=0
+			;;
 		-h)
 			usage
 			exit
@@ -77,10 +82,12 @@ done
 
 if [ -n "$conf" ]
 then
-	fic=$conf/file.txt
-	lev=$conf/level.txt
-	par=$conf/param.txt
-elif [ -z "$fic" -o -z "$lev" -o -z "$par" ]
+	[ -z "$fic" ] && fic=$conf/file.txt
+	[ -z "$lev" -a -s $conf/level.txt ] && lev=$conf/level.txt || lev=0
+	[ -z "$par" ] && par=$conf/param.txt
+fi
+
+if [ -z "$fic" -o -z "$lev" -o -z "$par" ]
 then
 	echo "Error: input options missing
 conf: '$conf'
@@ -88,6 +95,13 @@ lev: '$lev'
 par: '$par'
 fic: '$fic'" >&2
 	exit 1
+fi
+
+if [ ! -s $lev ] && ! echo $lev | grep -qE '[0-9]+(:[0-9]+)*'
+then
+	echo "Error: option '-level' uncorrectly defined" >&2
+	exit 1
+	#echo $lev | tr ':' '\n' > $loc/levels.txt
 fi
 
 set -e
@@ -109,42 +123,104 @@ fi
 echo "--> sending output to $loc"
 mkdir -p $loc
 
-if [ ! -s "$lev" ] && ! echo $lev | grep -qE '[0-9]+(:[0-9]+)*'
+if [ $graph -eq 1 ]
 then
-	echo "Error: option '-level' uncorrectly defined" >&2
-	exit 1
-	#echo $lev | tr ':' '\n' > $loc/levels.txt
+	type R > /dev/null 2>&1 || module -s load intel R > /dev/null 2>&1
+	R --slave -f $diags/diag.R --args fic=$fic params=$par level=$lev png=$loc $opt > \
+		$loc/out.txt
 fi
 
-type R > /dev/null 2>&1 || module -s load intel R > /dev/null 2>&1
+[ -n "$html" ] || exit
 
-R --slave -f $diags/diag.R --args fic=$fic params=$par level=$lev png=$loc $opt
+#cat $loc/out.txt | grep -E 'base/step' | sed -re 's,.+base/step: *,,' > $loc/steps.txt
+ficdom=config/domain.txt
+[ ! -s $ficdom ] && ficdom=$diags/config/domain.txt
 
-if [ -n "$html" ]
-then
-	for type in map hist err score spec prof
-	do
+doms=$(awk -F "\t+" 'NR > 1 {print $1}' $ficdom)
+params=$(ls -1 $loc | grep -E 'map1.+_\w+\.png$' | sed -re 's:.+_(\w+)\.png:\1:' | \
+	sort -u)
+echo "HTML files: $nstep forecast steps
+params: $params
+domains: $doms"
+
+for par in $params
+do
+	ficpar=$(dirname $html)/$par.html
+	echo ". creating $ficpar"
+
 	{
-		echo "<tr>"
+	i=0
+	while read -a tt
+	do
+		i=$((i+1))
+		echo ${tt[*]} | grep -qE 'graph: TRUE' || continue
 
-		n=0
-		for ficp in $(ls -1 $loc | grep -E "$type.+.png")
-		do
-			if [ $n -eq 2 ]
-			then
-				echo -e "</tr>\n<tr>\n"
-				n=0
-			fi
-
-			n=$((n+1))
-			printf "\t<td><img src=\"%s\"/></td>\n" $loc/$ficp
-		done
+		echo "<table>"
+		echo "<tr><th>Maps and cross-sections</th><th>Histograms</th>"
+		att="colspan=\"2\""
+		if [ -n "$ref" ]
+		then
+			echo "<th>Difference from ref</th><th>Histograms of difference from ref</th>"
+			att="colspan=\"4\""
+		fi
 
 		echo "</tr>"
-	} > $loc/$type.html
+
+		for dom in $doms
+		do
+			echo "<tr><th $att>Param '$par' - base/step ${tt[*]} - Domain $dom</th><tr>"
+			echo "<tr>"
+
+			for typ in map section hist mapdiff histdiff
+			do
+				fic=$loc/$typ$i${dom}_$par.png
+				[ -s $fic ] || continue
+
+				printf "\t<td><img src=\"%s\" alt=\"missing image\"/></td>\n" $fic
+			done
+
+			echo "</tr>"
+		done
+
+		echo "</table>"
+	done < $loc/steps.txt
+
+	typd=("err" "score" "scorev")
+	titd=("Statistics of forecast error" "Scores of forecasts" "Scores of profile")
+	for i in 0 1 2
+	do
+		echo "<h2>${titd[i]} on domains</h2>
+<table>
+<tr>"
+
+		for ficp in $(ls -1 $loc | grep -E "${typd[i]}[0-9]+_$par.png" | sort)
+		do
+			printf "\t<td><img src=\"%s\" alt=\"missing image\"/></td>\n" $loc/$ficp
+		done
+
+		echo "</tr>
+</table>"
 	done
 
-	sed -re "/TAG MAP/r $loc/map.html" -e "/TAG HIST/r $loc/hist.html" \
-		-e "/TAG SPEC/r $loc/spec.html" -e "/TAG PROF/r $loc/prof.html" \
-		-e "/TAG ERR/r $loc/err.html" -e "/TAG SCORE/r $loc/score.html" $diags/diag.html > $html/diag.html
-fi
+	if false
+	then
+		typd=("stats" "dstats")
+		titd=("forecasts" "errors")
+		for i in 0 1
+		do
+			echo "<h2>Statistics of ${titd[i]} (whole domain)</h2>
+	<table><tr>"
+
+			for ficp in $(ls -1 $loc | grep -E "${typd[i]}[0-9]+.png" | sort)
+			do
+				printf "\t<td><img src=\"%s\" alt=\"missing image\"/></td>\n" $loc/$ficp
+			done
+
+		echo "</tr>
+	</table>"
+		done
+	fi
+	} > $loc/$par.html
+
+	sed -re "s:TAG PAR:$par:" -e "/TAG BODY/r $loc/$par.html" $diags/par.html > $ficpar
+done

@@ -59,25 +59,30 @@ a = epygram.formats.resource(fname,"r")
 
 if a.format != "GRIB":
 	geom = a.geometry
+	grid = geom.grid
+	dimg = geom.dimensions
 
 	islam = geom.name in ("lambert","mercator","regular_lonlat")
 	if islam:
 		print("Geometry:",geom.name,"(Limited Area)")
+		nlat = dimg["Y"]
+		nlon = dimg["X"]
 	else:
 		print("Geometry::",geom.name,"(global)")
 		if geom.name not in ("gauss","reduced_gauss","rotated_reduced_gauss"):
 			exit("error unknown geom name")
 
-	grid = geom.get_lonlat_grid()
-	longs = grid[0]
-	lats = grid[1]
+		nlon = dimg["lon_number_by_lat"]
+		if geom.name == "rotated_reduced_gauss":
+			locen = grid["pole_lon"].get("degrees")
+			mucen = grid["pole_lat"].get()[1]
+			gem = (grid["dilatation_coef"],mucen,locen)
+
+	lonlat = geom.get_lonlat_grid()
+	longs = lonlat[0]
+	lats = lonlat[1]
 	lats = lats.compressed()
 	longs = longs.compressed()
-	if islam:
-		nlat = geom.dimensions["Y"]
-		nlon = geom.dimensions["X"]
-	else:
-		nlon = geom.dimensions["lon_number_by_lat"]
 
 	vv = geom.vcoordinate
 	if len(vv.levels) == 1:
@@ -129,6 +134,7 @@ if tag == "frame":
 		longs.tofile(con)
 		Ai.tofile(con)
 		Bi.tofile(con)
+		numpy.array(gem).tofile(con)
 elif tag != "":
 	print(". read fields "+tag)
 	if tag == "list":
@@ -205,7 +211,7 @@ elif tag != "":
 		if con != None:
 			data.tofile(con)
 
-	# (debug) mark end of file with one known integer value
+	# (debug) mark end of data with one known integer value
 	if con != None:
 		numpy.array(nf).tofile(con)
 
