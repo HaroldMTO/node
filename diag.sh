@@ -132,15 +132,14 @@ fi
 
 [ -n "$html" ] || exit
 
-#cat $loc/out.txt | grep -E 'base/step' | sed -re 's,.+base/step: *,,' > $loc/steps.txt
 ficdom=config/domain.txt
 [ ! -s $ficdom ] && ficdom=$diags/config/domain.txt
 
-doms=$(awk -F "\t+" 'NR > 1 {print $1}' $ficdom)
-params=$(ls -1 $loc | grep -E 'map1.+_\w+\.png$' | sed -re 's:.+_(\w+)\.png:\1:' | \
+doms=$(awk -F "\t+" 'NR > 1 {print $1}' $ficdom | xargs)
+params=$(ls -1 $loc | grep -E 'map[1-9].+_\w+\.png$' | sed -re 's:.+_(\w+)\.png:\1:' | \
 	sort -u)
+nstep=$(wc -l $loc/steps.txt | awk '{print $1}')
 echo "HTML files: $nstep forecast steps
-params: $params
 domains: $doms"
 
 for par in $params
@@ -149,10 +148,10 @@ do
 	echo ". creating $ficpar"
 
 	{
-	i=0
+	it=0
 	while read -a tt
 	do
-		i=$((i+1))
+		it=$((it+1))
 		echo ${tt[*]} | grep -qE 'graph: TRUE' || continue
 
 		echo "<table>"
@@ -173,7 +172,7 @@ do
 
 			for typ in map section hist mapdiff histdiff
 			do
-				fic=$loc/$typ$i${dom}_$par.png
+				fic=$loc/$typ$it${dom}_$par.png
 				[ -s $fic ] || continue
 
 				printf "\t<td><img src=\"%s\" alt=\"missing image\"/></td>\n" $fic
@@ -185,9 +184,11 @@ do
 		echo "</table>"
 	done < $loc/steps.txt
 
-	typd=("err" "score" "scorev")
-	titd=("Statistics of forecast error" "Scores of forecasts" "Scores of profile")
-	for i in 0 1 2
+	typd=("stat" "statv" "err" "score" "scorev")
+	titd=("Statistics of forecast" "Statistics of profile" "Statistics of forecast error" \
+		"Scores of forecasts" "Scores of profile")
+	i=0
+	while [ $i -lt ${#typd[*]} ]
 	do
 		echo "<h2>${titd[i]} on domains</h2>
 <table>
@@ -200,26 +201,8 @@ do
 
 		echo "</tr>
 </table>"
+		i=$((i+1))
 	done
-
-	if false
-	then
-		typd=("stats" "dstats")
-		titd=("forecasts" "errors")
-		for i in 0 1
-		do
-			echo "<h2>Statistics of ${titd[i]} (whole domain)</h2>
-	<table><tr>"
-
-			for ficp in $(ls -1 $loc | grep -E "${typd[i]}[0-9]+.png" | sort)
-			do
-				printf "\t<td><img src=\"%s\" alt=\"missing image\"/></td>\n" $loc/$ficp
-			done
-
-		echo "</tr>
-	</table>"
-		done
-	fi
 	} > $loc/$par.html
 
 	sed -re "s:TAG PAR:$par:" -e "/TAG BODY/r $loc/$par.html" $diags/par.html > $ficpar
