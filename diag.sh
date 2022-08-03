@@ -155,11 +155,11 @@ do
 		echo ${tt[*]} | grep -qE 'graph: TRUE' || continue
 
 		echo "<table>"
-		echo "<tr><th>Maps and cross-sections</th><th>Histograms</th>"
+		echo "<tr><th>Maps, selection of levels</th><th>Cross-sections and diagrams</th>"
 		att="colspan=\"2\""
 		if [ -n "$ref" ]
 		then
-			echo "<th>Difference from ref</th><th>Histograms of difference from ref</th>"
+			echo "<th>Maps for reference</th><th>Cross-sections and diagrams for ref</th>"
 			att="colspan=\"4\""
 		fi
 
@@ -184,9 +184,10 @@ do
 		echo "</table>"
 	done < $loc/steps.txt
 
-	typd=("stat" "statv" "err" "score" "scorev")
+	typd=("stat" "statv" "err" "errv" "score" "scorev" "scoret" "rmsevt")
 	titd=("Statistics of forecast" "Statistics of profile" "Statistics of forecast error" \
-		"Scores of forecasts" "Scores of profile")
+		"Statistics of profile error" "Scores of forecasts" "Scores of profile" \
+		"Daily scores" "Daily RMSE")
 	i=0
 	while [ $i -lt ${#typd[*]} ]
 	do

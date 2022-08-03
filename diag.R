@@ -1,6 +1,7 @@
 diags = "~/util/diags"
 
 library(maps)
+library(mapproj)
 
 Gvp0 = 101325
 
@@ -14,6 +15,11 @@ readDom = function(filename,header=TRUE,...)
 
 	doms = lapply(seq(dim(df)[1]),
 		function(i) list(xlim=c(df$west[i],df$east[i]),ylim=c(df$south[i],df$north[i])))
+
+	for (i in seq(dim(df)[1])) {
+		doms[[i]]$proj = df$proj[i]
+		if (df$param[i] != "-") doms[[i]]$param = df$param[i]
+	}
 
 	names(doms) = df$name
 	doms
@@ -105,11 +111,13 @@ getVars = function(con,grid,vars)
 {
 	lvar = vector("list",length(vars))
 
+	cvars = sub("^\\.?","",vars)
+
 	while (TRUE) {
 		nx = readBin(con,"integer",1,endian="swap")
 		if (length(nx) == 0) break
 
-		s = readChar(con,nx)
+		varname = readChar(con,nx)
 		stopifnot(nx == readBin(con,"integer",1,endian="swap"))
 
 		nx = readBin(con,"integer",1,endian="swap")
@@ -120,7 +128,7 @@ getVars = function(con,grid,vars)
 		nx = readBin(con,"integer",1,endian="swap")
 		stopifnot(nx/grid$nfp == nl*grid$npdg)
 
-		i = match(sub("^\\.?(\\w+) +$","\\1",s),sub("^\\.?","",vars))
+		i = match(sub("^\\.?(\\w+) +$","\\1",varname),cvars)
 		if (is.na(i)) {
 			seek(con,nl*grid$npdg*grid$nfp+4,"current")
 			next
@@ -184,7 +192,7 @@ getFrame = function(file)
 	frame
 }
 
-getField = function(fic,param,symbol,frame,frlow=frame,interp=FALSE)
+getField = function(fic,param,symbol,frame,frlow=frame)
 {
 	stopifnot(! is.null(frlow$ilev))
 
@@ -192,19 +200,30 @@ getField = function(fic,param,symbol,frame,frlow=frame,interp=FALSE)
 	if (file.exists(fsave)) {
 		ilev = 0
 		load(fsave)
-		if (dim(data)[1] == frlow$npdg && identical(ilev,frlow$ilev)) return(data)
 
-		cat("--> different grid or levels, read data again\n")
+		if (! identical(ilev,frlow$ilev)) {
+			fsave = sprintf("%s/e%d/%s.2.RData",dirname(fic),frame$step/3600,symbol)
+			if (file.exists(fsave)) load(fsave)
+		}
+
+		if (! identical(ilev,frlow$ilev)) {
+			cat("--> different levels, read data again\n")
+		} else if (dim(data)[1] != frlow$npdg) {
+			cat("--> different grid, read data again\n")
+		} else {
+			cat("--> data read from cache",fsave,"\n")
+			return(data)
+		}
 	}
 
 	data = getGPFields(fic,param,frame)
 
 	if (frame$npdg != frlow$npdg) {
-		if (interp) {
-			data = interpGauss(data,frame,frlow)
-		} else {
-			stopifnot("ind" %in% names(frlow))
+		if ("ind" %in% names(frlow)) {
+			stopifnot(frlow$npdg0 == frame$npdg)
 			data = data[frlow$ind,,drop=FALSE]
+		} else {
+			data = interpGauss(data,frame,frlow)
 		}
 	}
 
@@ -253,6 +272,7 @@ getSPFields = function(file,field,frame)
 degrade = function(frame,ilat,nlat,nlon=2)
 {
 	stopifnot(all(frame$nlong%%nlon == 0))
+	frame$npdg0 = frame$npdg
 
 	if (frame$gauss) {
 		if (missing(ilat)) {
@@ -517,12 +537,9 @@ interp = function(datao,clato,ilato,ilono1,ilono2,e0,e1,e2)
 
 interpAB = function(datao,framo,frame)
 {
-	eta = frame$A/Gvp0+frame$B
-	etao = framo$A/Gvp0+framo$B
-
-	ind = findInterval(eta,etao)
-	e = (eta-etao[ind])/(etao[ind+1]-etao[ind])
-	stopifnot(all(0 < ind & ind < length(etao)))
+	ind = findInterval(frame$eta,framo$eta)
+	e = (frame$eta-framo$eta[ind])/(framo$eta[ind+1]-framo$eta[ind])
+	stopifnot(all(0 < ind & ind < length(framo$eta)))
 	stopifnot(all(0 <= e & e < 1))
 
 	data = matrix(nrow=dim(datao)[1],ncol=frame$nlevel)
@@ -531,26 +548,6 @@ interpAB = function(datao,framo,frame)
 		d1 = datao[,ind[i]]
 		d2 = datao[,ind[i]+1]
 		data[,i] = d1+e[i]*(d2-d1)
-	}
-
-	data
-}
-
-xdiff = function(data,frame)
-{
-	stopifnot(frame$gauss)
-
-	dlon = cos(frame$theta*pi/180)*360/frame$nlong
-	gm = dlon[frame$nlat%/%2]/dlon
-
-	clats = c(0,cumsum(frame$nlong))
-
-	for (i in seq(frame$nlat)) {
-		ip = clats[i]+seq(frame$nlong[i])
-
-		d1 = gm[i]*(data[ip[1],]-data[ip[length(ip)],])
-		for (j in seq(dim(data)[2])) data[ip[-1],j] = gm[i]*diff(data[ip,j])
-		data[ip[1],] = d1
 	}
 
 	data
@@ -567,7 +564,8 @@ dilat = function(frame)
 	for (i in seq(frame$nlat)) {
 		ip = clats[i]+seq(frame$nlong[i])
 
-		ddm[i] = mean(sqrt(diff(frame$lat[ip])^2+diff(frame$long[ip])^2))
+		dlon = abs(diff(frame$long[ip]))
+		ddm[i] = mean(sqrt(diff(frame$lat[ip])^2+pmin(dlon,360-dlon)^2))
 	}
 
 	ddm/max(ddm[1:frame$nlat/2])
@@ -602,12 +600,12 @@ vmean = function(data,m=median,decreasing=TRUE)
 	nlev = dim(data)[2]
 
 	indf = apply(data,1,order,decreasing=decreasing)
-	mm = matrix(c(1:np,indf[,1]),ncol=2)
-	ddm01 = data[mm]
+	mm1 = matrix(c(1:np,indf[,1]),ncol=2)
+	ddm01 = data[mm1]
 	if (nlev < 4) return(ddm01)
 
-	mm = matrix(c(1:np,indf[,1]),ncol=2)
-	ddm02 = data[mm]
+	mm2 = matrix(c(1:np,indf[,2]),ncol=2)
+	ddm02 = data[mm2]
 
 	dd = data
 	ip = logical(np)
@@ -615,10 +613,8 @@ vmean = function(data,m=median,decreasing=TRUE)
 	for (im in seq(nlev%/%4)) {
 		for (i in seq(nlev-2*im)+im) dd[,i] = apply(dd,1,function(x) m(x[c(i-im,i+im)]))
 		#indf = apply(dd,1,order,decreasing=decreasing)
-		mm = matrix(c(1:np,indf[,1]),ncol=2)
-		ddm1 = dd[mm]
-		mm = matrix(c(1:np,indf[,2]),ncol=2)
-		ddm2 = dd[mm]
+		ddm1 = dd[mm1]
+		ddm2 = dd[mm2]
 
 		ip = ip | abs(ddm1-ddm01) < abs(ddm2-ddm02)
 		ddm1[ip] = ddm2[ip]
@@ -655,8 +651,9 @@ longRange = function(long)
 	dlong1 = range(long%%360)
 	dlong2 = range((long+180)%%360-180)
 
-	if (diff(dlong1) > 180 && diff(dlong2) > 180)
-		stop("longitudes span more than 180dg (case not supported)")
+	# if long span more than 180, make no choice (take whole globe)
+	if (diff(dlong1) > 180 && diff(dlong2) > 180) return(c(-180,180))
+	#stop("longitudes span more than 180dg (case not supported)")
 
 	if (diff(dlong1) <= diff(dlong2)) {
 		return(dlong1)
@@ -858,13 +855,41 @@ sectionf = function(data,frame,lat,long=c(0,360))
 	list(long=longs[ind,ilat],lats=frame$lat[ip],longs=frame$long[ip],data=data1)
 }
 
-mapxy = function(xy,axes=TRUE,frame.plot=TRUE,...)
+prettyBreaks = function(x,breaks="Sturges",n=8)
 {
-	l = map(xlim=xy$xlim,ylim=xy$ylim,...)
+	h = hist(x,breaks,plot=FALSE)
 
-	if (axes) {
-		axis(1)
-		axis(2)
+	if (is.character(breaks)) {
+		n = max(n,1)
+		if (length(h$breaks) > n && length(which(h$counts > 0)) >= n) {
+			h = hist(x,n,plot=FALSE)
+		}
+
+		if (length(h$breaks) > n && length(which(h$counts > 0)) > 2) {
+			h = hist(x,n-1,plot=FALSE)
+		}
+	}
+
+	indx = order(h$counts,decreasing=TRUE)
+	if (length(indx) > 1 && h$counts[indx[1]] > 2*h$counts[indx[2]]) {
+		h = hist(x,sort(c(h$breaks,mean(h$breaks[indx[1]+0:1]))),plot=FALSE)
+	}
+
+	h
+}
+
+mapxy = function(dom,axes=TRUE,frame.plot=TRUE,...)
+{
+	if (dom$proj == "-") {
+		l = map(xlim=dom$xlim,ylim=dom$ylim,...)
+
+		# axes for rectangular projection only
+		if (axes) {
+			axis(1)
+			axis(2)
+		}
+	} else {
+		l = map(projection=dom$proj,parameters=dom$param,xlim=dom$xlim,ylim=dom$ylim,...)
 	}
 
 	if (frame.plot) box()
@@ -872,15 +897,23 @@ mapxy = function(xy,axes=TRUE,frame.plot=TRUE,...)
 	l
 }
 
-plotxy = function(x,y,data,breaks="Sturges",palette=terrain.colors,pch=15,ppi=50,
-	cex.leg=.8,...)
+mapdom = function(dom,points,data,axes=TRUE,main=NULL,mar=par("mar"),breaks="Sturges",
+	palette=terrain.colors,pch=15,ppi=50,...)
 {
+	l = mapxy(dom,axes=axes,mar=mar)
+
 	u = par("usr")
 	f = par("fin")
 
-	if (ppi > 144) stop("ppi > 144\n")
+	if (ppi > 144) stop("ppi > 144")
 
 	npmax = as.integer(min(prod(f*ppi),.Machine$integer.max))
+
+	x = points$long
+	y = points$lat
+
+	h = prettyBreaks(data,breaks)
+	b = cut(data,h$breaks)
 
 	if (length(data) > npmax) {
 		cat("--> reducing xy plot from",length(data),"to",npmax,"points\n")
@@ -891,35 +924,53 @@ plotxy = function(x,y,data,breaks="Sturges",palette=terrain.colors,pch=15,ppi=50
 			ind[seq(3,length(ind),by=3)] = ind[seq(3,length(ind),by=3)]-dn%/%2
 		}
 
+		b2 = cut(data[ind],h$breaks)
+
+		ii = which(h$counts > 0 & table(b2) == 0)
+		if (length(ii) > 0) {
+			ind1 = which(b %in% levels(b)[ii])
+			ind = c(ind,ind1)
+			stopifnot(all(! duplicated(ind)))
+			cat("--> selecting back",length(ind1),"lost points in",length(ii),"data bins\n")
+		}
+
 		x = x[ind]
 		y = y[ind]
 		data = data[ind]
 	}
 
-	h = hist(data,breaks,plot=FALSE)
 	br = h$breaks
-	if (is.character(breaks) && length(br) > 8) {
-		h = hist(data,breaks=8,plot=FALSE)
-		br = h$breaks
-	}
 
 	ind = findInterval(data,br)
 	cols = palette(length(br))
 
-	points(x,y,col=cols[ind],pch=pch,...)
+	if (dom$proj == "-") {
+		points(x,y,col=cols[ind],pch=pch,...)
+	} else {
+		mp = mapproject(x,y)
+		points(mp$x,mp$y,col=cols[ind],pch=pch,...)
+	}
 
 	levels = sprintf("% .3g",br)
-	DOPfill.legend(levels,col=cols,cex.axis=cex.leg)
+	DOPfill.legend(levels,col=cols)
+
+	lines(l)
+	title(main)
 }
 
-plotxy2 = function(x,y,zx,zy,breaks="Sturges",colvec=TRUE,length=.05,angle=15,ppi=8,
-	cex.leg=.8,...)
+mapdom2 = function(dom,points,zx,zy,axes=TRUE,main=NULL,mar=par("mar"),breaks="Sturges",
+	colvec=TRUE,length=.05,angle=15,ppi=8,...)
 {
+	l = mapxy(dom,axes=axes,mar=mar)
+
 	f = par("fin")
 
 	if (ppi > 96) stop("ppi > 96\n")
 
 	npmax = as.integer(min(prod(f*ppi),.Machine$integer.max))
+
+	x = points$long
+	y = points$lat
 
 	if (length(zx) > npmax) {
 		cat("--> reducing xy2 plot from",length(zx),"to",npmax,"points\n")
@@ -950,12 +1001,7 @@ plotxy2 = function(x,y,zx,zy,breaks="Sturges",colvec=TRUE,length=.05,angle=15,pp
 		fx = zx/ffz*ffu
 		fy = zy/ffz*ffu
 
-		h = hist(ffz,breaks,plot=FALSE)
-		br = h$breaks
-		if (is.character(breaks) && length(br) > 8) {
-			h = hist(ffz,breaks=8,plot=FALSE)
-			br = h$breaks
-		}
+		br = prettyBreaks(ffz)$breaks
 
 		ic = findInterval(ffz,br)
 		palette = rainbow(length(br),start=2/3,end=0)
@@ -973,16 +1019,34 @@ plotxy2 = function(x,y,zx,zy,breaks="Sturges",colvec=TRUE,length=.05,angle=15,pp
 	ffi = sqrt((fx/ux*f[1])^2+(fy/uy*f[2])^2)
 
 	ind = ffi > 1.e-3
-	arrows(x[ind],y[ind],x2[ind],y2[ind],length,angle,col=cols[ind],...)
-	if (any(! ind)) points(x[! ind],y[! ind],pch=1,col=1)
+
+	if (dom$proj == "-") {
+		arrows(x,y,x2,y2,length,angle,col=cols[ind],...)
+	} else {
+		mp = mapproject(x[ind],y[ind])
+		mp2 = mapproject(x2[ind],y2[ind])
+		arrows(mp$x,mp$y,mp2$x,mp2$y,length,angle,col=cols[ind],...)
+	}
+
+	if (any(! ind)) {
+		if (dom$proj == "-") {
+			points(x[! ind],y[! ind],pch=1,col=1)
+		} else {
+			mp = mapproject(x[! ind],y[! ind])
+			points(mp$x,mp$y,pch=1,col=1)
+		}
+	}
 
 	if (colvec) {
 		levels = sprintf("% .3g",br)
-		DOPfill.legend(levels,col=palette,cex.axis=cex.leg)
+		DOPfill.legend(levels,col=palette)
 	}
+
+	lines(l)
+	title(main)
 }
 
-DOPfill.legend = function(levels,col,...)
+DOPfill.legend = function(breaks,col,...)
 {
 	u = par("usr")
 	p = par("plt")
@@ -990,7 +1054,7 @@ DOPfill.legend = function(levels,col,...)
 	width = (1-p[2])/6*diff(u[1:2])/diff(p[1:2])
 	x = u[2]+width/3
 
-	nl = length(levels)
+	nl = length(breaks)
 	height = diff(u[3:4])
 	dy = height/(nl-1)
 	y = u[3]
@@ -1000,7 +1064,7 @@ DOPfill.legend = function(levels,col,...)
 	rect(x,ybas,x+width,yhaut,col=col,border=NA,xpd=TRUE)
 
 	op = par(las=2,yaxt="s")
-	axis(4,c(ybas[1],yhaut),levels,tick=FALSE,pos=x,mgp=c(1,.5,0),...)
+	axis(4,c(ybas[1],yhaut),breaks,tick=FALSE,pos=x+width/12,mgp=c(1,.8,0),...)
 	par(op)
 }
 
@@ -1045,7 +1109,17 @@ plotv0 = function(x,y,z,ylim=NULL,xaxt="s",yaxt="s",...)
 
 plotv = function(x,y,z,nlevels=8,ylim=rev(range(y,finite=TRUE)),xaxs="i",yaxs="i",...)
 {
-	contour(x,y,z,nlevels=nlevels,ylim=ylim,xaxs=xaxs,yaxs=yaxs,...)
+	if (missing(nlevels)) {
+		br = prettyBreaks(z)$breaks
+		stopifnot(all(min(br) <= z & z <= max(br)))
+		cols = hcl.colors(length(br)-1,"YlOrRd",rev=TRUE)
+		#contour(x,y,z,levels=br,ylim=ylim,xaxs=xaxs,yaxs=yaxs,...)
+		image(x,y,z,ylim=ylim,col=cols,breaks=br,xaxs=xaxs,yaxs=yaxs,...)
+		lev = sprintf("% .3g",br)
+		DOPfill.legend(lev,col=cols)
+	} else {
+		contour(x,y,z,nlevels,ylim=ylim,xaxs=xaxs,yaxs=yaxs,...)
+	}
 }
 
 plotf = function(y,z,ylim=NULL,plot.axes=TRUE,...)
@@ -1071,24 +1145,9 @@ plotz = function(x,y,type="o",pch="+",...)
 	plot(x,y,type=type,pch=pch,...)
 }
 
-mapdom = function(dom,points,data,axes=TRUE,main=NULL,mar=par("mar"),...)
-{
-	l = mapxy(dom,axes=axes,mar=mar)
-	plotxy(points$long,points$lat,data,...)
-	lines(l)
-	title(main)
-}
-
-mapdom2 = function(dom,points,datax,datay,axes=TRUE,main=NULL,mar=par("mar"),...)
-{
-	l = mapxy(dom,axes=axes,mar=mar)
-	plotxy2(points$long,points$lat,datax,datay,...)
-	lines(l)
-	title(main)
-}
-
 mapexi = function(data,frame,desc,doms,np=4,prefix="",graph=TRUE,...)
 {
+	mar = c(1.5,1.5,2,5)+.1
 	nl = dim(data)[2]
 	qv = array(dim=c(101,nl,length(doms)))
 
@@ -1108,57 +1167,59 @@ mapexi = function(data,frame,desc,doms,np=4,prefix="",graph=TRUE,...)
 			xy = zoom(data,frame,doms[[i]])
 		}
 
+		stopifnot(all(is.finite(xy$data)))
 		qv[,,i] = apply(xy$data,2,quantile,prob=seq(0,100)/100)
 
 		if (! graph) next
 
 		nom = names(doms)[i]
 		tt = desc$longname
-		mar = c(1,1,2,5)+.1
 		cat(".. domain:",nom,"\n")
 
 		pngalt(sprintf("%s/map%s%s_%s.png",pngd,prefix,nom,desc$symbol))
 		if (nl == 1) {
-			op = par(mar=mar,mgp=c(2,.75,0))
+			op = par(Gpar,mar=mar)
 			mapdom(doms[[i]],xy,xy$data[,1],main=tt,...)
 		} else {
 			long = round(mean(domin$xlim),1)
 			lat = round(mean(domin$ylim),1)
 
-			op = par(mfcol=c(2,2),mar=mar,mgp=c(2,.75,0))
+			op = par(Gpar,mfrow=c(2,2),mar=mar,cex=.66)
 
-			for (il in c(1,nl)) {
-				tt[2] = sprintf("level %d",frame$ilev[il])
+			# be careful of nl=2...
+			indl = seq(1,nl,length.out=min(4,nl))
+			if (length(Gindl) == 2) indl = c(1,Gindl,nl)
+			for (il in indl) {
+				ilev = frame$ilev[il]
+				tt[2] = sprintf("level %d (eta %g)",ilev,round(frame$eta[ilev],2))
 				mapdom(doms[[i]],xy,xy$data[,il],main=tt,mar=mar,...)
 				abline(h=lat,col="darkgrey",lty=2)
 				abline(v=long,col="darkgrey",lty=2)
 			}
-
-			yz = sectiongeo(data,frame,long=mean(domin$xlim),lat=domin$ylim)
-			tt[2] = sprintf("S->N section, longitude %g",long)
-			plotv(yz$lats,etai,yz$data,main=tt,xlab="Latitude",ylab="eta")
-			xz = sectiongeo(data,frame,lat=mean(domin$ylim),long=domin$xlim)
-			tt[2] = sprintf("W->E section, latitude %g",lat)
-			plotv(xz$longs,etai,xz$data,main=tt,xlab="Longitude",ylab="eta")
 		}
 
 		pngoff(op)
 
 		pngalt(sprintf("%s/hist%s%s_%s.png",pngd,prefix,nom,desc$symbol))
-		nr = min(nl,3)
 		if (nl == 1) {
-			op = par(mfrow=c(nr,1),mar=c(3,3,3,1)+.1)
-			hist(xy$data[,1],col="whitesmoke",main=tt,xlab=desc$longname)
+			op = par(Gpar)
+			hist(xy$data,col="whitesmoke",main=tt[1],xlab=desc$longname)
 		} else {
-			op = par(mfrow=c(nr,2),mar=c(3,3,3,1)+.1)
-			indl = c(1,1+nl%/%2,nl)
-			for (il in indl[1:nr]) {
-				mapdom(doms[[i]],xy,xy$data[,il],mar=c(0,0,0,5)+.1,axes=FALSE,...)
-				abline(h=lat,col="darkgrey",lty=2)
-				abline(v=long,col="darkgrey",lty=2)
-				tt[2] = sprintf("level %d",frame$ilev[il])
-				hist(xy$data[,il],col="whitesmoke",main=tt,xlab=desc$longname)
-			}
+			op = par(Gpar,mfcol=c(2,2),mar=c(2,2,3,4)+.1,cex=.66)
+			yz = sectiongeo(data,frame,long=mean(domin$xlim),lat=domin$ylim)
+			stopifnot(all(is.finite(yz$data)))
+			tt[2] = sprintf("S->N section, longitude %g",long)
+			plotv(yz$lats,etai,yz$data,main=tt,xlab="Latitude",ylab="eta")
+			xz = sectiongeo(data,frame,lat=mean(domin$ylim),long=domin$xlim)
+			stopifnot(all(is.finite(xz$data)))
+			tt[2] = sprintf("W->E section, latitude %g",lat)
+			plotv(xz$longs,etai,xz$data,main=tt,xlab="Longitude",ylab="eta")
+
+			par(mar=c(2,2,3,1)+.1)
+			h = hist(xy$data,col="whitesmoke",main=tt[1],xlab=desc$symbol)
+			rug(range(h$breaks),lwd=.8)
+			plotbv(qv[,,i],etai,main=tt[1],xlab=desc$symbol,ylab="eta",ylim=yeta)
+			abline(v=0,col="darkgrey",lty=2)
 		}
 
 		pngoff(op)
@@ -1169,6 +1230,7 @@ mapexi = function(data,frame,desc,doms,np=4,prefix="",graph=TRUE,...)
 
 mapex2 = function(u,v,frame,doms,np=4,prefix="",graph=TRUE,...)
 {
+	mar = c(1.5,1.5,2,5)+.1
 	nl = dim(u)[2]
 	qv = array(dim=c(101,nl,length(doms)))
 
@@ -1184,70 +1246,94 @@ mapex2 = function(u,v,frame,doms,np=4,prefix="",graph=TRUE,...)
 		} else {
 			pts = select(frame,ind)
 			domin = getDomain(pts)
+			if (area(domin,doms[[i]]) < .1) next
+
 			x = zoom(u,frame,doms[[i]])
 			y = zoom(v,frame,doms[[i]])
 		}
 
 		ffdom = sqrt(x$data^2+y$data^2)
-		qv[,,i] = apply(ff,2,quantile,prob=seq(0,100)/100)
+		stopifnot(all(is.finite(ffdom)))
+		qv[,,i] = apply(ffdom,2,quantile,prob=seq(0,100)/100)
 
-		if (! graph || area(domin,doms[[i]]) < .1) next
+		if (! graph) next
 
 		nom = names(doms)[i]
 		tt = "u/v wind"
 		cat(".. domain:",nom,"\n")
 		ff = sqrt(u^2+v^2)
-		mar = c(1,1,2,5)+.1
 
 		pngalt(sprintf("%s/map%s%s_ff.png",pngd,prefix,nom))
 		if (nl == 1) {
-			op = par(mar=mar,mgp=c(2,.75,0))
+			op = par(Gpar,mar=mar)
 			mapdom2(doms[[i]],x,x$data,y$data,main=tt,...)
 		} else {
 			long = round(mean(domin$xlim),1)
 			lat = round(mean(domin$ylim),1)
 
-			op = par(mfcol=c(2,2),mar=mar,mgp=c(2,.75,0))
+			op = par(Gpar,mfcol=c(2,2),mar=mar,cex=.66)
 
-			for (il in c(1,nl)) {
-				tt[2] = sprintf("level %d",frame$ilev[il])
+			# if nl=2...
+			indl = seq(1,nl,length.out=min(4,nl))
+			if (length(Gindl) == 2) indl = c(1,Gindl,nl)
+			for (il in indl) {
+				ilev = frame$ilev[il]
+				tt[2] = sprintf("level %d (eta %g)",ilev,round(frame$eta[ilev],2))
 				mapdom2(doms[[i]],x,x$data[,il],y$data[,il],main=tt,mar=mar,...)
 				abline(h=lat,col="darkgrey",lty=2)
 				abline(v=long,col="darkgrey",lty=2)
 			}
 
-			yz = sectiongeo(ff,frame,long=mean(domin$xlim),lat=domin$ylim)
-			tt[2] = sprintf("S->N section, longitude %g",long)
-			plotv(yz$lats,etai,yz$data,main=tt,xlab="Latitude",ylab="eta")
-			xz = sectiongeo(ff,frame,lat=mean(domin$ylim),long=domin$xlim)
-			tt[2] = sprintf("W->E section, latitude %g",lat)
-			plotv(xz$longs,etai,xz$data,main=tt,xlab="Longitude",ylab="eta")
+			par(mar=c(1.5,1.5,2,1)+.1)
 		}
 
 		pngoff(op)
 
 		pngalt(sprintf("%s/hist%s%s_ff.png",pngd,prefix,nom))
 		tt = "wind speed"
-		nr = min(nl,3)
 		if (nl == 1) {
-			op = par(mfrow=c(nr,1),mar=c(3,3,3,1)+.1)
-			hist(ffdom[,il],col="whitesmoke",main=tt,xlab="wind speed")
+			op = par(Gpar)
+			hist(ffdom,col="whitesmoke",main=tt[1],xlab="wind speed")
 		} else {
-			op = par(mfrow=c(nr,2),mar=c(3,3,3,1)+.1)
-			indl = c(1,1+nl%/%2,nl)
-			for (il in indl[1:nr]) {
-				mapdom2(doms[[i]],x,x$data[,il],y$data[,il],axes=FALSE,mar=mar,...)
-				abline(h=lat,col="darkgrey",lty=2)
-				abline(v=long,col="darkgrey",lty=2)
-				tt[2] = sprintf("level %d",frame$ilev[il])
-				hist(ffdom[,il],col="whitesmoke",main=tt,xlab="wind speed")
-			}
+			op = par(Gpar,mfcol=c(2,2),cex=.66)
+			yz = sectiongeo(ff,frame,long=mean(domin$xlim),lat=domin$ylim)
+			tt[2] = sprintf("S->N section, longitude %g",long)
+			plotv(yz$lats,etai,yz$data,main=tt,xlab="Latitude",ylab="eta")
+			xz = sectiongeo(ff,frame,lat=mean(domin$ylim),long=domin$xlim)
+			tt[2] = sprintf("W->E section, latitude %g",lat)
+			plotv(xz$longs,etai,xz$data,main=tt,xlab="Longitude",ylab="eta")
+
+			par(mar=c(2,2,3,1)+.1)
+			h = hist(ffdom,col="whitesmoke",main=tt[1],xlab="wind speed")
+			rug(range(h$breaks),lwd=.8)
+			plotbv(qv[,,i],etai,main=tt[1],xlab=desc$symbol,ylab="eta",ylim=yeta)
+			abline(v=0,col="darkgrey",lty=2)
 		}
 
 		pngoff(op)
 	}
 
 	qv
+}
+
+stat2array = function(lstat)
+{
+	# can be list() (ie no dim) because of bin files or missing dates
+	dims = dim(lstat[[1]][[1]])
+	if (is.null(dims)) dims = dim(lstat[[2]][[1]])
+	stopifnot(! is.null(dims))
+
+	data = array(NA_real_,dim=c(dims,length(lstat[[1]]),length(lstat)))
+
+	for (i in seq(along=lstat)) {
+		for (id in seq(along=lstat[[i]])) {
+			if (is.list(lstat[[i]][[id]])) next
+
+			data[,,,id,i] = simplify2array(lstat[[i]][[id]])
+		}
+	}
+
+	data
 }
 
 rms = function(x,...)
@@ -1265,24 +1351,25 @@ plotb = function(x,y,...)
 
 plotbv = function(x,y,...)
 {
-	plot(x[3,],y,type="l",xlim=range(x,na.rm=TRUE),...)
-	w = diff(range(y))/dim(x)[1]
-	boxplot(x,range=0,col="bisque",lty=1,pars=list(boxwex=.15*w),horizontal=TRUE,add=TRUE,
+	n1 = dim(x)[1]
+	plot(x[1+n1%/%2,],y,type="l",xlim=range(x,na.rm=TRUE),...)
+	w = diff(range(y))
+	boxplot(x,range=0,col="bisque",lty=1,pars=list(boxwex=.03*w),horizontal=TRUE,add=TRUE,
 		at=y,xaxt="n",yaxt="n")
 }
 
-matplott = function(x,y,...)
+matplott = function(x,y,col=1,...)
 {
-	matplot(x,y,type="o",lty=1:3,col=1,pch="+",...)
+	matplot(x,y,type="o",lty=1:3,col=col,pch="+",...)
 	abline(h=0,col="grey")
-	legend("topleft",c("RMS","bias","std dev"),col=1,lty=1:3,pch="+",bg="transparent")
+	legend("topleft",c("RMS","bias","std dev"),col=col,lty=1:3,pch="+",bg="transparent")
 }
 
-matplotv = function(x,y,...)
+matplotv = function(x,y,col=1,...)
 {
-	matplot(x,y,type="o",lty=1:3,col=1,pch="-",...)
+	matplot(x,y,type="o",lty=1:3,col=col,pch="-",...)
 	abline(v=0,col="grey")
-	legend("topleft",c("RMS","bias","std dev"),col=1,lty=1:3,pch="+",bg="transparent")
+	legend("topleft",c("RMS","bias","std dev"),col=col,lty=1:3,pch="+",bg="transparent")
 }
 
 pngalt = function(...)
@@ -1304,7 +1391,31 @@ pngoff = function(op)
 	}
 }
 
+loadStat = function(path,framep,paramsp,datesp,htimep)
+{
+	noms = load(sprintf("%s/diag.RData",path))
+	stopifnot(all(c("frlow","params","dates","htime","lstatd","lstatffd") %in% noms))
 
+	if (frlow$gauss != frame$gauss) return(NULL)
+	if (frlow$nlat != frame$nlat || ! identical(frlow$nlong,frame$nlong)) return(NULL)
+	if (frlow$nlevel != frame$nlevel || ! identical(frlow$ilev,framep$ilev)) return(NULL)
+	if (! identical(sort(dates),sort(datesp))) return(NULL)
+
+	indp = match(paramsp,params)
+	if (any(is.na(indp))) return(NULL)
+
+	indt = match(htimep,htime)
+	if (any(is.na(indt))) return(NULL)
+
+	lstatd = lapply(lstatd[indp],"[",indt)
+
+	if (is.array(lstatffd[[1]][[1]])) lstatd = c(lstatd,list(lstatffd[indt]))
+
+	lstatd
+}
+
+
+Gpar = list(mar=c(2,2,3,1)+.1,mgp=c(2.1,.6,0),tcl=-.3,cex=.83)
 Gficbin = tempfile(fileext=".bin")
 
 if (file.exists("config/domain.txt")) {
@@ -1324,6 +1435,9 @@ if ("fic" %in% names(cargs)) {
 } else {
 	dff = read.table("config/file.txt",header=TRUE)
 }
+
+Gindt = 1+length(dff$file)%/%2
+if ("time" %in% names(dff)) Gindt = which(dff$time)
 
 dates = NA
 
@@ -1354,14 +1468,16 @@ npar = dim(desc)[1]
 ilev = 0
 if ("level" %in% names(cargs)) {
 	if (length(cargs$level) == 1 && file.exists(cargs$level)) {
-		ilev = scan(cargs$level,what=integer(),quiet=TRUE)
+		ilev = scan(cargs$level,what=numeric(),quiet=TRUE)
 	} else {
-		ilev = as.integer(cargs$level)
+		ilev = as.numeric(cargs$level)
 	}
 } else if (file.exists("config/level.txt")) {
-	ilev = scan("config/level.txt",what=integer(),quiet=TRUE)
+	ilev = scan("config/level.txt",what=numeric(),quiet=TRUE)
 }
 
+Gindl = which(as.integer((10*ilev)%%10) > 0)
+ilev = as.integer(ilev)
 cat("--> level indices/number (0: all levels):",ilev,"\n")
 
 pngd = "."
@@ -1385,10 +1501,8 @@ if (interactive()) browser()
 for (id in seq(along=dates)) {
 	if (is.na(dates[id])) {
 		fics = dff$file
-		ficsave = sprintf("%s/diag.Rdata",dirname(fics[1]))
 	} else {
 		fics = sprintf("%02d/%d/%s",res,dates[id],dff$file)
-		ficsave = sprintf("%s/diag_%d%02d.Rdata",dirname(fics[1]),dates[id],res)
 		cat("\nReading files for base:",dates[id],"\n")
 	}
 
@@ -1399,12 +1513,6 @@ for (id in seq(along=dates)) {
 	}
 
 	isbin = regexpr("\\.bin$",fics) > 0
-
-	if (file.exists(ficsave) && all(! isbin)) {
-		cat("--> load",ficsave,"and skip maps\n")
-		load(ficsave)
-		next
-	}
 
 	for (i in seq(along=fics)) {
 		cat("\nFile",basename(fics[i]),":\n")
@@ -1442,10 +1550,10 @@ for (id in seq(along=dates)) {
 		}
 
 		gg = id == 1 && dff$graph[i]
-		if (gg && frame$gauss) {
+		if (FALSE && gg && frame$gauss) {
 			mapf = dilat(frame)
 			ilateq = equalize(mapf,offset=3)
-			if (FALSE && length(ilateq) < frame$nlat) frlow = degrade(frame,ilateq)
+			if (length(ilateq) < frame$nlat) frlow = degrade(frame,ilateq)
 
 			pngalt(sprintf("%s/stretch%d.png",pngd,i))
 			tt = c("Stretching coefficient","normalized at Equator")
@@ -1515,6 +1623,7 @@ for (id in seq(along=dates)) {
 				data = ldata[[j]]
 				if (is.null(data)) next
 				if (dim(data)[2] > 1 && dim(data)[2] != length(frlow$ilev)) {
+					cat("--> change 'bin' levels:",dim(data)[2],"-->",length(frlow$ilev),"\n")
 					data = data[,frlow$ilev,drop=FALSE]
 				}
 			} else {
@@ -1523,6 +1632,10 @@ for (id in seq(along=dates)) {
 			}
 
 			nl = dim(data)[2]
+			if (desc$conv[j] != "") {
+				fconv = eval(parse(text=desc$conv[j]))
+				data = fconv(data)
+			}
 
 			# primary checks
 			stopifnot(all(! is.infinite(data)))
@@ -1533,19 +1646,6 @@ for (id in seq(along=dates)) {
 
 			lstat[[j]][[i]][[id]] = mapexi(data,frlow,desc[j,],doms,prefix=i,graph=gg)
 
-			if (gg && frame$gauss) {
-				cat("Statistics of zonal difference:\n")
-				ddx = xdiff(data,frlow)
-				print(summary(as.vector(ddx)))
-
-				if (FALSE && any(ddx != 0)) {
-					pngalt(sprintf("%s/spec45_%s.png",pngd,ss))
-					d45 = lat45(data,frlow)
-					spectrum(d45[,nl],c(3,3),main="Smoothed spectral density of lat ~45")
-					pngoff()
-				}
-			}
-
 			if (graph2 && nl > 2) {
 				cat("Mean vertical profile\n")
 				datam = apply(data,2,mean)
@@ -1554,16 +1654,6 @@ for (id in seq(along=dates)) {
 				tt = c("Mean vertical profile",sprintf("Field %s",nom))
 				plotz(datam,etai,ylim=yeta,main=tt,xlab=nom,ylab="eta")
 				pngoff()
-
-				ddz = vgrad(data,frlow)
-				ddz = t(apply(data,1,diff))
-
-				cat("Statistics of vertical gradient:\n")
-				print(summary(as.vector(ddz)))
-				ix = arrayInd(which.max(abs(data)),dim(data))
-				il = ix[1,2]
-				ix = ix[1,1]
-				plotz(ddz[ix,],etai[-1],ylim=yeta,main=tt,xlab=nom,ylab="eta")
 			}
 
 			if (desc$save[j] == "X") {
@@ -1581,6 +1671,8 @@ for (id in seq(along=dates)) {
 				if (! isbin[i]) next
 				datao = ldata[[j]]
 				if (is.null(datao)) next
+
+				# for some vars (like cty) can be nl+1
 				if (dim(datao)[2] > 1 && dim(datao)[2] != length(frlow$ilev)) {
 					datao = datao[,frlow$ilev,drop=FALSE]
 				}
@@ -1588,6 +1680,8 @@ for (id in seq(along=dates)) {
 				if (isbin[i]) next
 				datao = getField(ficref,patt,ss,framo,frlow)
 			}
+
+			if (desc$conv[j] != "") datao = fconv(datao)
 
 			if (desc$save[j] == "X") {
 				dataox = datao
@@ -1601,71 +1695,8 @@ for (id in seq(along=dates)) {
 
 			dstatd[i,,id,j] = quantile(ddiff[,nl],c(0,.1,.5,.9,1),names=FALSE)
 
-			cat("Statistics of forecast error:\n")
-			print(summary(as.vector(ddiff)))
-			drms = sqrt(mean(ddiff^2))
-			cat("Global bias/RMSE:",mean(ddiff),drms,"\n")
-
-			cat("Global bias/RMSE by level:\n")
-			dbias = apply(ddiff,2,mean)
-			drms = apply(ddiff,2,function(x) sqrt(mean(x^2)))
-			print(summary(dbias))
-			print(summary(drms))
-
-			lstatd[[j]][[i]][[id]] = mapexi(ddiff,frlow,desc[j,],doms,
-				prefix=sprintf("diff%d",i),graph=gg)
-
-			if (graph2) {
-				cat("Statistics around diff min/max value:\n")
-				i1 = arrayInd(which.min(ddiff),dim(ddiff))[1,1]
-				i2 = arrayInd(which.max(ddiff),dim(ddiff))[1,1]
-				dom = makeDomain(frlow,i1,c(-20,20),c(-30,30))
-				xy = zoom(ddiff,frlow,dom)
-				print(summary(as.vector(xy$data)))
-				drms = sqrt(mean(xy$data^2))
-				cat("RMSE at local min:",drms,"\n")
-
-				pngalt(sprintf("%s/diffmin_%s.png",pngd,ss))
-				mapdom(dom,frlow,ddiff[,nl],main=nom)
-				pngoff()
-
-				dom = makeDomain(frlow,i2,c(-20,20),c(-30,30))
-				xy = zoom(ddiff,frlow,dom)
-				print(summary(as.vector(xy$data)))
-				drms = sqrt(mean(xy$data^2))
-				cat("RMSE at local max:",drms,"\n")
-
-				pngalt(sprintf("%s/diffmin_%s.png",pngd,ss))
-				mapdom(dom,frlow,ddiff[,nl],main=nom)
-				pngoff()
-
-				if (nl > 2) {
-					pngalt(sprintf("%s/profile_%s.png",pngd,ss))
-					par(mfrow=c(1,2))
-					tt = sprintf("Field %s",nom)
-					tt[2] = "Profile at point 'min of error'"
-					plotz(data[i1,],etai,ylim=yeta,main=tt,xlab=nom,ylab="eta")
-					tt[2] = "Profile at point 'max of error'"
-					plotz(data[i2,],etai,ylim=yeta,main=tt,xlab=nom,ylab="eta")
-					pngoff()
-
-					ns = length(yzs$lat)
-					dataf = yzn$data
-					dataf[1:ns,] = yzs$data[ind,]
-					#levels = prettydiff(dataf,7)
-
-					pngalt(sprintf("%s/vsecdiff_%s.png",pngd,ss),720)
-					x = seq(0,1,length.out=dim(dataf)[1])
-					xlab = "<- Equator  ...  //  ...  France  ...  //  ...  North pole ->"
-					plotv(x,etai,dataf,nlevels=7,main=tt[1],xlab=xlab,ylab="eta")
-					pngoff()
-
-					pngalt(sprintf("%s/vsecfill_%s.png",pngd,ss),720)
-					plotf(etai,dataf,nlevels=7,color.palette=cm.colors,main=tt[1],xlab=xlab,
-						ylab="eta")
-					pngoff()
-				}
-			}
+			mapexi(datao,frlow,desc[j,],doms,prefix=sprintf("diff%d",i),graph=gg)
+			lstatd[[j]][[i]][[id]] = mapexi(ddiff,frlow,desc[j,],doms,graph=FALSE)
 		}
 
 		if (! is.null(datax) && ! is.null(datay)) {
@@ -1729,24 +1760,29 @@ for (id in seq(along=dates)) {
 			lstatffd[[i]][[id]] = mapexi(ffd,frlow,descff,doms,prefix=sprintf("diff%d",i))
 		}
 	}
-
-	save("lstat","lstatd","lstatff","lstatffd","dstats","dstatd","tstep","htime",
-		file=ficsave)
 }
 
 if (! is.null(cargs$png)) cat(tstep,file=sprintf("%s/steps.txt",cargs$png))
 
-labs = sprintf("Lead time (%s)",c("s","mn","h","days"))
-xaxis = data.frame(unit=c(1,60,3600,86400),label=labs,mindiff=5*c(0,60,3600,86400),
-	cunit=c("s","mn","h","d"))
-iu = findInterval(diff(range(htime)),xaxis$mindiff)
-tunit = xaxis$unit[iu]
-cunit = xaxis$cunit[iu]
-xlabt = xaxis$label[iu]
-htime = htime/tunit
+# units and labels
+tlab = sprintf("Lead time (%s)",c("s","mn","h","days"))
+unit = c(1,60,3600,86400)
+mindiff = 5*c(0,60,3600,86400)
+tunit = c("s","mn","h","d")
+iu = findInterval(diff(range(htime)),mindiff)
+tunit = tunit[iu]
+tlab = tlab[iu]
+htime = htime/unit[iu]
 tfreq = 1
-if (tunit == 3600 && diff(range(htime)) > 12) tfreq = 3
+if (unit[iu] == 3600 && diff(range(htime)) > 12) tfreq = 3
 ht6 = pretty(htime/tfreq)*tfreq
+etai = frlow$eta[frlow$ilev]
+yeta = rev(range(frlow$eta))
+
+save("frlow","params","dates","htime","lstatd","lstatffd",file="diag.RData")
+
+lstatr = NULL
+if ("cmp" %in% names(cargs)) lstatr = loadStat(cargs$cmp,frlow,params,dates,htime)
 
 if (length(fics) > 1) {
 	cat("Summary statistics of forecasts (whole domain, whole atm.)\n")
@@ -1757,11 +1793,11 @@ if (length(fics) > 1) {
 
 	for (i in seq((nf-1)%/%nr+1)-1) {
 		pngalt(sprintf("%s/stats%d.png",pngd,i))
-		op = par(mfrow=c(nr,1),mar=c(3,3,3,1)+.1,mgp=c(2,.75,0))
+		op = par(Gpar,mfrow=c(nr,1),cex=.66)
 
 		for (j in 1:min(nf-nr*i,nr)+nr*i) {
 			ds = apply(dstats[,,,j,drop=FALSE],1:2,mean,na=TRUE)
-			plotb(htime,t(ds),main=tt[j],xlab=xlabt,ylab=desc$symbol[j],xaxt="n")
+			plotb(htime,t(ds),main=tt[j],xlab=tlab,ylab=desc$symbol[j],xaxt="n")
 			axis(1,ht6)
 		}
 
@@ -1779,7 +1815,7 @@ if (length(fics) > 1) {
 	longname = desc$longname
 	symbol = desc$symbol
 
-	if (any(! is.na(lstatff[[1]][[1]][[1]]))) {
+	if (is.array(lstatff[[1]][[1]])) {
 		lstat = c(lstat,list(lstatff))
 		longname = c(desc$longname,"wind speed")
 		symbol = c(desc$symbol,"ff")
@@ -1788,18 +1824,13 @@ if (length(fics) > 1) {
 	for (j in seq(along=lstat)) {
 		ss = symbol[j]
 		nom = longname[j]
+		cat(". param",nom,"\n")
 
-		# complexity because of bin files
-		nl = dim(lstat[[j]][[1]][[1]])[2]
-		if (is.null(nl)) nl = dim(lstat[[j]][[2]][[1]])[2]
-		qv100 = array(NA_real_,dim=c(101,nl,ndom,length(dates),length(fics)))
-		for (i in seq(along=fics)) {
-			for (id in seq(along=dates)) {
-				if (is.list(lstat[[j]][[i]][[id]])) next
-				qv100[,,,id,i] = simplify2array(lstat[[j]][[i]][[id]])
-			}
-		}
+		qv100 = stat2array(lstat[[j]])
+		nl = dim(qv100)[2]
+		stopifnot(all(dim(qv100)[-2] == c(101,ndom,length(dates),length(fics))))
 
+		# dims are [val,lev,dom,time]
 		qv = apply(qv100,c(2,3,5),quantile,prob=c(0,2,5,8,10)/10,na.rm=TRUE)
 
 		tt = sprintf("Statistics of %s",nom)
@@ -1809,12 +1840,12 @@ if (length(fics) > 1) {
 
 		for (i in seq((ndom-1)%/%nc+1)-1) {
 			pngalt(sprintf("%s/stat%d_%s.png",pngd,i,ss))
-			op = par(mfcol=c(nr,nc),mar=c(3,3,3,1)+.1,mgp=c(2,.75,0))
+			op = par(Gpar,mfcol=c(nr,nc),cex=.66)
 
 			for (id in 1:min(ndom-nc*i,nc)+nc*i) {
 				for (il in indl[1:nr]) {
 					tt[2] = sprintf("domain %s, level %d",names(doms)[id],frlow$ilev[il])
-					plotb(htime,qv[,il,id,],main=tt,xlab=xlabt,ylab=ss,xaxt="n")
+					plotb(htime,qv[,il,id,],main=tt,xlab=tlab,ylab=ss,xaxt="n")
 					axis(1,ht6)
 				}
 			}
@@ -1824,20 +1855,20 @@ if (length(fics) > 1) {
 
 		if (nl == 1) next
 
-		etai = frlow$eta[frlow$ilev]
-		yeta = rev(range(frlow$eta))
 		indt = which(apply(qv,4,function(x) any(! is.na(x))))
-		if (length(indt) > 3) indt = indt[seq(1,length(indt),length.out=min(length(indt),3))]
+		if (length(Gindt) > 0) indt = Gindt
+		nt = length(indt)
+		if (nt > 3) indt = indt[seq(1,nt,length.out=min(nt,3))]
 		nr = min(2,ndom)
 		nc = min(3,length(indt))
 
 		for (i in seq((ndom-1)%/%nr+1)-1) {
 			pngalt(sprintf("%s/statv%d_%s.png",pngd,i,ss))
-			op = par(mfrow=c(nr,nc),mar=c(3,3,3,0)+.1,mgp=c(2,.75,0))
+			op = par(Gpar,mfrow=c(nr,nc),cex=.66)
 
 			for (id in 1:min(ndom-nr*i,nr)+nr*i) {
 				for (it in indt[1:nc]) {
-					tt[2] = sprintf("domain %s, lead-time %g%s",names(doms)[id],htime[it],cunit)
+					tt[2] = sprintf("domain %s, lead-time %g%s",names(doms)[id],htime[it],tunit)
 					plotbv(qv[,,id,it],etai,main=tt,xlab=ss,ylab="eta",ylim=yeta)
 				}
 			}
@@ -1856,11 +1887,11 @@ if (any(! is.na(dstatd))) {
 
 	for (i in seq((nf-1)%/%nr+1)-1) {
 		pngalt(sprintf("%s/dstats%d.png",pngd,i))
-		op = par(mfrow=c(nr,2),mar=c(3,3,3,1)+.1,mgp=c(2,.75,0))
+		op = par(Gpar,mfrow=c(nr,2),cex=.66)
 
 		for (j in 1:min(nf-nr*i,nr)+nr*i) {
 			ds = apply(dstatd[,,,j,drop=FALSE],1:2,mean,na.rm=TRUE)
-			plotb(htime,t(ds),main=tt[j],xlab=xlabt,ylab=ss,xaxt="n")
+			plotb(htime,t(ds),main=tt[j],xlab=tlab,ylab=ss,xaxt="n")
 			axis(1,ht6)
 		}
 
@@ -1878,7 +1909,7 @@ if (any(! is.na(dstatd))) {
 	longname = desc$longname
 	symbol = desc$symbol
 
-	if (any(! is.na(lstatffd[[1]][[1]][[1]]))) {
+	if (is.array(lstatffd[[1]][[1]])) {
 		lstatd = c(lstatd,list(lstatffd))
 		longname = c(desc$longname,"wind speed")
 		symbol = c(desc$symbol,"ff")
@@ -1887,20 +1918,23 @@ if (any(! is.na(dstatd))) {
 	for (j in seq(along=lstatd)) {
 		ss = symbol[j]
 		nom = longname[j]
+		cat(". param",nom,"\n")
 
-		# complexity because of bin files
-		nl = dim(lstatd[[j]][[1]][[1]])[2]
-		if (is.null(nl)) nl = dim(lstatd[[j]][[2]][[1]])[2]
-		qv100 = array(NA_real_,dim=c(101,nl,ndom,length(dates),length(fics)))
-		for (i in seq(along=fics)) {
-			for (id in seq(along=dates)) {
-				if (is.list(lstatd[[j]][[i]][[id]])) next
-				qv100[,,,id,i] = simplify2array(lstatd[[j]][[i]][[id]])
-			}
-		}
+		qv100 = stat2array(lstatd[[j]])
+		nl = dim(qv100)[2]
+		stopifnot(all(dim(qv100)[-2] == c(101,ndom,length(dates),length(fics))))
 
+		# dims are [val,lev,dom,time]
 		qv = apply(qv100,c(2,3,5),quantile,prob=c(0,2,5,8,10)/10,na.rm=TRUE)
 		rmsv = apply(qv100,c(2,3,5),rms,na.rm=TRUE)
+		rmsv = aperm(rmsv,c(2:4,1))
+		cols = rep(c("black","royalblue1"),each=3)
+		if (! is.null(lstatr)) {
+			qv100r = stat2array(lstatr[[j]])
+			rmsvr = apply(qv100r,c(2,3,5),rms,na.rm=TRUE)
+			rmsvr = aperm(rmsvr,c(2:4,1))
+			rmsv = array(c(rmsv,rmsvr),c(dim(rmsv)[1:3],2*dim(rmsv)[4]))
+		}
 
 		tt = sprintf("Error of %s",nom)
 		nr = min(3,nl)
@@ -1909,12 +1943,12 @@ if (any(! is.na(dstatd))) {
 
 		for (i in seq((ndom-1)%/%nc+1)-1) {
 			pngalt(sprintf("%s/err%d_%s.png",pngd,i,ss))
-			op = par(mfcol=c(nr,nc),mar=c(3,3,3,1)+.1,mgp=c(2,.75,0))
+			op = par(Gpar,mfcol=c(nr,nc),cex=.66)
 
 			for (id in 1:min(ndom-nc*i,nc)+nc*i) {
 				for (il in indl[1:nr]) {
 					tt[2] = sprintf("domain %s, level %d",names(doms)[id],frlow$ilev[il])
-					plotb(htime,qv[,il,id,],main=tt,xlab=xlabt,ylab=ss,xaxt="n")
+					plotb(htime,qv[,il,id,],main=tt,xlab=tlab,ylab=ss,xaxt="n")
 					axis(1,ht6)
 				}
 			}
@@ -1926,12 +1960,12 @@ if (any(! is.na(dstatd))) {
 
 		for (i in seq((ndom-1)%/%nc+1)-1) {
 			pngalt(sprintf("%s/score%d_%s.png",pngd,i,ss))
-			op = par(mfcol=c(nr,nc),mar=c(3,3,3,1)+.1,mgp=c(2,.75,0))
+			op = par(Gpar,mfcol=c(nr,nc),cex=.66)
 
 			for (id in 1:min(ndom-nc*i,nc)+nc*i) {
-				for (il in indl) {
+				for (il in indl[1:nr]) {
 					tt[2] = sprintf("domain %s, level %d",names(doms)[id],frlow$ilev[il])
-					matplott(htime,t(rmsv[,il,id,]),xlab=xlabt,ylab=ss,main=tt,xaxt="n")
+					matplott(htime,rmsv[il,id,,],xlab=tlab,ylab=ss,main=tt,col=cols,xaxt="n")
 					axis(1,ht6)
 				}
 			}
@@ -1939,23 +1973,95 @@ if (any(! is.na(dstatd))) {
 			pngoff(op)
 		}
 
+		indt = which(apply(qv,4,function(x) any(! is.na(x))))
+		if (length(Gindt) > 0) indt = Gindt
+		nt = length(indt)
+		if (nt > 3) indt = indt[seq(1,nt,length.out=min(nt,3))]
+
+		if (length(dates) > 1) {
+			dd = as.Date(as.character(dates),format="%Y%m%d")
+			indd = order(dd)
+			nr = min(3,length(indt))
+			rmsd = apply(qv100,3:5,rms,na.rm=TRUE)
+			rmsd = aperm(rmsd,c(2:4,1))
+			if (! is.null(lstatr)) {
+				rmsr = apply(qv100r,3:5,rms,na.rm=TRUE)
+				rmsr = aperm(rmsr,c(2:4,1))
+				rmsd = array(c(rmsd,rmsr),c(dim(rmsd)[1:3],2*dim(rmsd)[4]))
+			}
+
+			for (i in seq((ndom-1)%/%nc+1)-1) {
+				pngalt(sprintf("%s/scoret%d_%s.png",pngd,i,ss))
+				op = par(Gpar,mfcol=c(nr,nc),cex=.66)
+
+				for (id in 1:min(ndom-nc*i,nc)+nc*i) {
+					for (it in indt[1:nr]) {
+						tt[2] = sprintf("domain %s, lead-time %g%s",names(doms)[id],htime[it],
+							tunit)
+						matplott(dd[indd],rmsd[id,indd,it,],xlab="Date",ylab=ss,main=tt,
+							col=cols,xaxt="n")
+						axis.Date(1,dd,format="%Y%m%d")
+					}
+				}
+
+				pngoff(op)
+			}
+
+			if (nl == 1) next
+
+			ttd = sprintf("RMSE of %s",nom)
+			rmsvd = apply(qv100,2:5,rms,na.rm=TRUE)
+
+			for (i in seq((ndom-1)%/%nc+1)-1) {
+				pngalt(sprintf("%s/rmsevt%d_%s.png",pngd,i,ss))
+				op = par(Gpar,mfcol=c(nr,nc),mar=c(2,2,3,3)+.1,cex=.66)
+
+				for (id in 1:min(ndom-nc*i,nc)+nc*i) {
+					for (it in indt[1:nr]) {
+						ttd[2] = sprintf("domain %s, lead-time %g%s",names(doms)[id],htime[it],
+							tunit)
+						plotv(dd[indd],etai,t(rmsvd[1,,id,indd,it]),ylim=yeta,
+							xlab="Date",ylab="eta",main=ttd,xaxt="n",las=0)
+						axis.Date(1,dd,format="%Y%m%d")
+					}
+				}
+
+				pngoff(op)
+			}
+		}
+
 		if (nl == 1) next
 
-		etai = frlow$eta[frlow$ilev]
-		yeta = rev(range(frlow$eta))
-		indt = which(apply(qv,4,function(x) any(! is.na(x))))
-		if (length(indt) > 3) indt = indt[seq(1,length(indt),length.out=min(length(indt),3))]
 		nr = min(2,ndom)
 		nc = min(3,length(indt))
 
 		for (i in seq((ndom-1)%/%nr+1)-1) {
 			pngalt(sprintf("%s/scorev%d_%s.png",pngd,i,ss))
-			op = par(mfrow=c(nr,nc),mar=c(3,3,3,0)+.1,mgp=c(2,.75,0))
+			op = par(Gpar,mfrow=c(nr,nc),cex=.66)
 
 			for (id in 1:min(ndom-nr*i,nr)+nr*i) {
 				for (it in indt[1:nc]) {
-					tt[2] = sprintf("domain %s, lead-time %g%s",names(doms)[id],htime[it],cunit)
-					matplotv(t(rmsv[,,id,it]),etai,xlab=ss,ylab="eta",main=tt,ylim=yeta)
+					tt[2] = sprintf("domain %s, lead-time %g%s",names(doms)[id],htime[it],
+						tunit)
+					matplotv(rmsv[,id,it,],etai,xlab=ss,ylab="eta",main=tt,ylim=yeta,col=cols)
+				}
+			}
+
+			pngoff(op)
+		}
+
+		# back to err, after scores
+		tt = sprintf("Error of %s",nom)
+
+		for (i in seq((ndom-1)%/%nr+1)-1) {
+			pngalt(sprintf("%s/errv%d_%s.png",pngd,i,ss))
+			op = par(Gpar,mfrow=c(nr,nc),cex=.66)
+
+			for (id in 1:min(ndom-nr*i,nr)+nr*i) {
+				for (it in indt[1:nc]) {
+					tt[2] = sprintf("domain %s, lead-time %g%s",names(doms)[id],htime[it],
+						tunit)
+					plotbv(qv[,,id,it],etai,main=tt,xlab=ss,ylab="eta",ylim=yeta)
 				}
 			}
 
@@ -1963,4 +2069,3 @@ if (any(! is.na(dstatd))) {
 		}
 	}
 }
-
