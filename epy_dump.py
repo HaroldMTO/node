@@ -68,7 +68,7 @@ if a.format != "GRIB":
 		nlat = dimg["Y"]
 		nlon = dimg["X"]
 	else:
-		print("Geometry::",geom.name,"(global)")
+		print("Geometry:",geom.name,"(global)")
 		if geom.name not in ("gauss","reduced_gauss","rotated_reduced_gauss"):
 			exit("error unknown geom name")
 
@@ -100,8 +100,8 @@ if a.format != "GRIB":
 	if spgeom.space == "legendre" and tc["shape"] == "triangular":
 		nwave = tc["max_zonal_wavenumber_by_lat"]
 		# last 0 is for recognition of global grid vs LAM grid
-		dims = len(nlon),len(nwave),len(vv.levels),geom.gridpoints_number,0
-		print("Dimensions (gaussian lats, waves, levels, grid-points):",dims)
+		dims = len(nlon),max(nwave),len(vv.levels),geom.gridpoints_number,0
+		print("Dimensions (gaussian lats, waves, levels, grid-points):",dims[:4])
 	elif spgeom.space == "bi-fourier" and tc["shape"] == "elliptic":
 		nwavex = tc["in_X"]
 		nwavey = tc["in_Y"]
@@ -156,8 +156,8 @@ elif tag != "":
 		import re
 		fheads = fields.listfields()
 
-		if re.search('^S001\w+',fheads[0].get("FA")) is None:
-			exit("Error: field names do not match level form 'S\d+'")
+		if re.search('^S\d+\w+',fheads[0].get("FA")) is None:
+			exit("Error: field names do not match level form 'S\d+\w+'")
 
 		for h in fheads:
 			if re.search('^S\d+\w+',h.get('FA')) is None:
@@ -169,6 +169,7 @@ elif tag != "":
 	finfo = True
 	ginfo = True
 	for j in fnoms.argsort():
+		print("... field",j,fnoms[j])
 		ff = fields[j]
 
 		if a.format == "GRIB":
