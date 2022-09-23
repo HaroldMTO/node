@@ -332,7 +332,7 @@ plotmap = function(sta,onl)
 
 	j = mp1[1,]%/%2
 	#rug(offlat,.01,side=4)
-	mtext(mp1[2,],2,at=offlat+j,adj=1.2,las=2,cex=.7)
+	mtext(mp1[2,],2,line=1,at=offlat+j,adj=0,las=2,cex=.7)
 	x = unlist(lapply(seq(along=j),function(i) sta[[i]][j[i],]+onl[[i]][j[i],]%/%2))
 	y = offlat+j
 	y = unlist(lapply(seq(along=y),function(i) rep(y[i],each=mp1[2,i])))
@@ -359,6 +359,20 @@ runtime = function(nd)
 	# in case of change of date (time goes to 00:00)
 	ind = which(dwalls < 0)
 	for (i in ind) dwalls[-(1:i)] = dwalls[-(1:i)]+86400
+
+	# small escalating over steps within 1s
+	i1 = 1
+	ind = which(c(dwalls,dwalls[length(dwalls)]+1) > 0)
+	for (i in ind) {
+		if (i > i1) {
+			n = i-i1+1
+			dt = seq(0,1,length.out=n+1)[-(n+1)]
+			walls[i1:i] = walls[i1]+dt
+		}
+
+		i1 = i+1
+	}
+
 	rt = data.frame(wall=walls,dwall=c(0,dwalls),cpu=cpus)
 
 	i1 = grep("TIME OF START *=",nd)
@@ -678,7 +692,7 @@ if (length(unique(nlong)) == 1) {
 cat("Grid-point mapping wrt MPI tasks\n")
 s = grep("SETA=.+ LAT=.+ NSTA=",nd,value=TRUE)
 sta = procmap(s)
-s = grep("SETA=.+ LAT=.+ D%NONL=",nd,value=TRUE)
+s = grep("SETA=.+ LAT=.+ (D%)?NONL=",nd,value=TRUE)
 onl = procmap(s)
 
 pngalt("procmap.png")
@@ -712,9 +726,9 @@ tt = runtime(nd)
 if (! is.null(tt)) {
 	nts = dim(tt)[1]
 
-	t0 = as.numeric(tt$wall[1]-attr(tt,"start"),units="secs") %% 86400
-	tint = as.numeric(tt$wall[nts]-tt$wall[1],units="secs") %% 86400
-	total = as.numeric(tt$wall[nts]-attr(tt,"start"),units="secs") %% 86400
+	t0 = round(as.numeric(tt$wall[1]-attr(tt,"start"),units="secs") %% 86400,3)
+	tint = round(as.numeric(tt$wall[nts]-tt$wall[1],units="secs") %% 86400,3)
+	total = round(as.numeric(tt$wall[nts]-attr(tt,"start"),units="secs") %% 86400,3)
 	sstt = sprintf("setup+step0, forecast, total: %gs, %gs, %gs",t0,tint,total)
 	cat(sstt,"\n")
 
@@ -725,7 +739,8 @@ if (! is.null(tt)) {
 	pngalt("runtime.png")
 	op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	its = seq(1,nts,by=pas[it])
-	plot(its-1,tt$dwall[its],type="h",main=c("Wall-time",sstt),xlab="Time-step",
+	dwall = c(0,diff(tt$wall))
+	plot(its-1,dwall[its],type="h",main=c("Wall-time",sstt),xlab="Time-step",
 		ylab="Time (s)")
 	plot(its-1,tt$cpu[its],type="h",main="CPU-time",xlab="Time-step",ylab="Time (s)")
 	pngoff(op)
