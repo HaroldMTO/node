@@ -1,0 +1,14 @@
+name		west	east	south	north		proj		param
+monde		-170	170	-85	85			-			-
+france	-6		11		40		53			-			-
+europe	-15	30		35		60			-			-
+asie		60		120	10		45			-			-
+hima		65		110	25		55			-			-
+amnord	-140	-50	25		70			-			-
+amsud		-90	-30	-60	10			-			-
+tropics	-50	80		-30	30			-			-
+austral	110	180	-50	-10		-			-
+poly		-155	-135	-23	-5			-			-
+eurat		-30	35		20		70			-			-
+pnord		-180	180	40		90			stereo	-
+psud		-180	180	-90	-40		stereo	-

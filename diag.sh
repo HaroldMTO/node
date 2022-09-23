@@ -135,7 +135,7 @@ fi
 ficdom=config/domain.txt
 [ ! -s $ficdom ] && ficdom=$diags/config/domain.txt
 
-doms=$(awk -F "\t+" 'NR > 1 {print $1}' $ficdom | xargs)
+doms=$(awk -F "(\t| )+" 'NR > 1 {print $1}' $ficdom | grep -vE '^ *#' | xargs)
 params=$(ls -1 $loc | grep -E 'map[1-9].+_\w+\.png$' | sed -re 's:.+_(\w+)\.png:\1:' | \
 	sort -u)
 nstep=$(wc -l $loc/steps.txt | awk '{print $1}')
@@ -167,10 +167,10 @@ do
 
 		for dom in $doms
 		do
-			echo "<tr><th $att>Param '$par' - base/step ${tt[*]} - Domain $dom</th><tr>"
+			echo "<tr><th $att>Param '$par' - ${tt[*]} - Domain $dom</th><tr>"
 			echo "<tr>"
 
-			for typ in map section hist mapdiff histdiff
+			for typ in map hist mapdiff histdiff
 			do
 				fic=$loc/$typ$it${dom}_$par.png
 				[ -s $fic ] || continue
@@ -179,7 +179,9 @@ do
 			done
 
 			echo "</tr>"
-		done
+		done > $loc/idom.html
+
+		grep -q '<img src=' $loc/idom.html && cat $loc/idom.html
 
 		echo "</table>"
 	done < $loc/steps.txt
