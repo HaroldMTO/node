@@ -100,7 +100,7 @@ if a.format != "GRIB":
 	if spgeom.space == "legendre" and tc["shape"] == "triangular":
 		nwave = tc["max_zonal_wavenumber_by_lat"]
 		# last 0 is for recognition of global grid vs LAM grid
-		dims = len(nlon),max(nwave),len(vv.levels),geom.gridpoints_number,0
+		dims = len(nlon),len(nwave),len(vv.levels),geom.gridpoints_number,0
 		print("Dimensions (gaussian lats, waves, levels, grid-points):",dims[:4])
 	elif spgeom.space == "bi-fourier" and tc["shape"] == "elliptic":
 		nwavex = tc["in_X"]
@@ -128,6 +128,7 @@ if tag == "frame":
 
 		bb = numpy.array(base.timestamp())
 		ss = numpy.array(step.total_seconds())
+		print("Base/step:",bb,ss)
 		bb.tofile(con)
 		ss.tofile(con)
 		lats.tofile(con)
@@ -207,7 +208,9 @@ elif tag != "":
 				finfo = False
 
 		data = ff.data
-		if (not islam): data = data.compressed()
+		if (not islam):
+			data = data.compressed()
+			print("Reduced gridpoints:",data.size)
 
 		if con != None:
 			data.tofile(con)
