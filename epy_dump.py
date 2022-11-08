@@ -135,7 +135,7 @@ if tag == "frame":
 		longs.tofile(con)
 		Ai.tofile(con)
 		Bi.tofile(con)
-		numpy.array(gem).tofile(con)
+		if not islam: numpy.array(gem).tofile(con)
 elif tag != "":
 	print(". read fields "+tag)
 	if tag == "list":
