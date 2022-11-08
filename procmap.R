@@ -141,6 +141,18 @@ abh = function(nd,nflevg)
 	data.frame(Ah=ah,Bh=bh,alpha=alh)
 }
 
+vfe = function(nd,nflevg,oper)
+{
+	i1 = grep(sprintf("VFE operator %s",oper),nd)
+	if (length(i1) == 0) return(NULL)
+
+	i2 = grep("VFE operator|A and B (at half levels|on half layers)",nd)
+	il = seq(i1+1,min(i2[i2 > i1])-1)
+	roper = numlines(nd[il])
+	stopifnot(length(roper)/nflevg == length(roper)%/%nflevg)
+	t(matrix(roper,ncol=nflevg))
+}
+
 silev = function(nd,nflevg)
 {
 	il = grep("^( *JLEV *=)? *\\d+ +SITLAF *=",nd)
@@ -451,14 +463,16 @@ pngoff = function(op)
 	}
 }
 
-args = commandArgs(TRUE)
-if (length(args) == 0) args = "NODE.001_01"
+args = strsplit(commandArgs(trailingOnly=TRUE),split="=")
+cargs = lapply(args,function(x) unlist(strsplit(x[-1],split=":")))
+names(cargs) = sapply(args,function(x) x[1])
 
-hasx11 = ! "png" %in% args && capabilities("X11")
-ask = hasx11 && interactive()
+hasx11 = ! "png" %in% names(cargs) && capabilities("X11")
 if (! hasx11) cat("--> no X11 device, sending plots to PNG files\n")
+ask = hasx11 && interactive()
+if (! "png" %in% names(cargs)) cargs$png = "."
 
-nd = readLines(args[1])
+nd = readLines(cargs$ficin)
 
 nproc = getvar("NPROC",nd)
 nprgpns = getvar(".*\\<NPRGPNS",nd)
@@ -480,10 +494,9 @@ if (length(nhtyp) == 0) nhtyp = getvar(".+ NHTYP",nd)
 
 nflevg = getvar("NFLEVG",nd)
 ab = abh(nd,nflevg)
-
 eta = ab$alpha+ab$Bh
 
-con = file("fp.txt","w")
+con = file(sprintf("%s/fp.txt",cargs$png),"w")
 cat("&NAMFPD\nNLAT =",ndglg,"\nNLON =",ndlon,"\n/\n",file=con)
 cat("&NAMFPG\n",file=con)
 dumpGem(con,gem,nsmax,nsttyp,nhtyp)
@@ -492,16 +505,16 @@ dumpAB(con,ab)
 cat("/\n",file=con)
 close(con)
 
-nfp = readLines("fp.txt")
+nfp = readLines(sprintf("%s/fp.txt",cargs$png))
 ind = grep("[&*/\\] *nam\\w+",nfp,invert=TRUE,ignore.case=TRUE)
 nfp[ind] = sub("([.0-9]) *$","\\1,",nfp[ind])
-writeLines(nfp,"fp.txt")
+writeLines(nfp,sprintf("%s/fp.txt",cargs$png))
 
 std = stdatm(nd,nflevg)
 itropo = getvar("SUSTA: CLOSEST FULL LEVEL",nd,":")
 itropt = which(std$T == std$T[itropo-1])[1]
 
-pngalt("eta.png")
+pngalt(sprintf("%s/eta.png",cargs$png))
 tt = c("Vertical hybrid coordinate",
 	sprintf("%d levels - tropopause: ~%d-%d",nflevg,itropt,itropo))
 matplot(cbind(ab[c("Bh","alpha")],eta=eta),type="o",lty=1,pch="|",main=tt,
@@ -510,7 +523,7 @@ legend("topleft",c("Bh","Ah/Pref",expression(eta)),lty=1,pch="|",col=1:3,inset=.
 abline(h=0,col="darkgrey")
 pngoff()
 
-pngalt("levels.png")
+pngalt(sprintf("%s/levels.png",cargs$png))
 op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 ss = "Layer interfaces"
 ylim = c(nflevg,0)
@@ -525,7 +538,7 @@ plot(ab$Ah,0:nflevg,type="o",lty=1,pch="-",main=c("Coefficient A/Pref",ss),
 abline(h=c(itropt,itropo),lty=2)
 pngoff(op)
 
-pngalt("stdatm.png")
+pngalt(sprintf("%s/stdatm.png",cargs$png))
 op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 ttstd = "Standard atmosphere"
 plot(std$P/100,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Pressure"),
@@ -540,10 +553,54 @@ plot(std$rho,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Density of air"),
 abline(h=c(0,std$Z[c(itropt,itropo)]),lty=2)
 pngoff(op)
 
+rinte = vfe(nd,nflevg,"RINTE")
+pngalt(sprintf("%s/vfeint.png",cargs$png))
+if (is.null(rinte)) {
+	op = par(pch="",xaxt="n",yaxt="n")
+	plot(1,xlab="",ylab="")
+	text(1,1,"no VFE array RINTE")
+} else {
+	ilev = c(1,nflevg%/%2,nflevg,nflevg+1)
+	op = par(mfrow=c(1,4),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0),pch="-")
+	for (i in c(1,nflevg%/%2,nflevg)) {
+		s = sum(rinte[,i])
+		plot(rinte[,i],seq(nflevg),type="o",xlab="Rinte_l",ylab="Level",
+			main=c(sprintf("VFE Sum_l=1,%d",i),sprintf("sum(Rinte): %.3g",s)),
+			ylim=c(nflevg,1))
+		abline(h=i,lty=2,col="grey")
+		abline(v=0,col="grey")
+	}
+
+	s = sum(rinte[,nflevg+1])
+	plot(rinte[,nflevg+1],seq(nflevg),type="o",xlab="Rinte_l",ylab="Level",
+		main=c("Integral",sprintf("sum(Rinte*1): %.3g",s)),ylim=c(nflevg,1))
+	abline(v=0,col="grey")
+}
+pngoff(op)
+
+rderi = vfe(nd,nflevg,"RDERI")
+pngalt(sprintf("%s/vfeder.png",cargs$png))
+if (is.null(rderi)) {
+	op = par(pch="",xaxt="n",yaxt="n")
+	plot(1,xlab="",ylab="")
+	text(1,1,"no VFE array RDERI")
+} else {
+	ilev = c(1,nflevg%/%2,nflevg,nflevg+1)
+	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0),pch="-")
+	for (i in c(1,nflevg%/%2,nflevg)) {
+		s = sum(rderi[,i])
+		plot(rderi[,i],seq(nflevg),type="o",xlab="Rderi_l",ylab="Level",
+			main=c(sprintf("VFE Sum_l=1,%d",i),sprintf("sum(Rderi): %.3g",s)),
+			ylim=c(nflevg,1))
+		abline(v=0,col="grey")
+	}
+}
+pngoff(op)
+
 cat("Vertical SI system and spectral horizontal diffusion\n")
 si = silev(nd,nflevg)
 
-pngalt("sipre.png")
+pngalt(sprintf("%s/sipre.png",cargs$png))
 op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 ylim = c(nflevg,1)
 plot(si$sivp,1:nflevg,type="o",lty=1,pch="-",main="SIVP: vert. modes (= freq.)",
@@ -555,7 +612,7 @@ plot(si$sidphi,1:nflevg,type="o",lty=1,pch="-",main="SIDPHI: diff. of geopotenti
 	xlab="Geopotential",ylab="Level",ylim=ylim,cex=1.5)
 pngoff(op)
 
-pngalt("sihd.png")
+pngalt(sprintf("%s/sihd.png",cargs$png))
 op = par(mfrow=c(2,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 plot(si$pdi/100,1:nflevg,type="l",lty=1,main="PDILEV: 1+7.5*(3-log10(P))",
 	xlab="PDILEV (hPa)",ylab="Level",ylim=ylim,cex=1.5)
@@ -596,7 +653,7 @@ if (length(nprtrw) == 0) {
 sp = spec(nd,ndglg)
 nm = length(sp$ndglu)-1
 
-pngalt("specgp.png")
+pngalt(sprintf("%s/specgp.png",cargs$png))
 op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 ss = sprintf("nmeng: %d... %d",min(sp$nmeng),max(sp$nmeng))
 plot(sp$nmeng,type="l",main=c("Wave cut-off per latitude",ss),xlab="Latitude index",
@@ -608,7 +665,7 @@ plot(0:nm,sp$ndglu,type="l",main=c("Nb of longitudes per wave",ss),
 axis(1,pretty((seq(along=sp$ndglu)-1)/8,8)*8)
 pngoff(op)
 
-pngalt("specproc.png")
+pngalt(sprintf("%s/specproc.png",cargs$png))
 op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 pr = unlist(lapply(seq(along=sp$numpp),function(i) rep(i,each=sp$numpp[i])))
 np = length(sp$nprocm)-1
@@ -626,12 +683,12 @@ if (any(duplicated(sp$nallms))) {
 }
 pngoff(op)
 
-pngalt("vset.png")
+pngalt(sprintf("%s/vset.png",cargs$png))
 plot(sp$nbsetlev,1:nflevg,type="p",ylim=ylim,main="V-set and levels",xlab="V-set",
 	ylab="Level",pch="-")
 pngoff()
 
-pngalt("speclap.png")
+pngalt(sprintf("%s/speclap.png",cargs$png))
 op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 plot(sp$rlapdi,type="l",main=c("Eigen-values of the Laplacian","'rlapdi'"),
 	xlab="Wave index 'jm'",ylab="Eigen-value")
@@ -645,7 +702,7 @@ cat("Vertical cubic weights (SL)\n")
 vintw = cuico(nd,nflevg)
 gamma = weno(nd,nflevg)
 
-pngalt("vintw.png")
+pngalt(sprintf("%s/vintw.png",cargs$png))
 op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 nl3 = nflevg-3
 ntop = min(nl3,5)
@@ -662,17 +719,19 @@ matplot(abs(vintw[nmid:nl3,2:4]),nmid:nl3,type="o",lty=1,pch="-",
 	main="Weight at bottom",xlab="abs(Weight)",ylab="Level",ylim=c(nl3,nmid))
 pngoff(op)
 
-if (! is.null(gamma)) {
-	pngalt("weno.png")
+pngalt(sprintf("%s/weno.png",cargs$png))
+if (is.null(gamma)) {
+	plot(1,xaxt="n",yaxt="n",xlab="",ylab="",pch="")
+	text(1,1,"no gamma weights (WENO)")
+} else {
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 
 	for (i in 1:3) {
 		tt = sprintf("WENO weights %d",i)
 		plot(gamma[,i],2:nl3,type="o",lty=1,pch="-",main=tt,xlab="Gamma",ylab="Level",ylim=c(nl3,2))
 	}
-
-	pngoff(op)
 }
+pngoff(op)
 
 if (length(unique(nlong)) == 1) {
 	cat("--> regular Gaussian grid\n")
@@ -682,7 +741,7 @@ if (length(unique(nlong)) == 1) {
 	n45 = nlong[length(nlong)%/%2]
 	nlon45 = equilon(ndgnh,n45*sqrt(2),1)
 
-	pngalt("ndlon.png")
+	pngalt(sprintf("%s/ndlon.png",cargs$png))
 	cat(par("mfrow"),"\n")
 	op = par(mfrow=c(1,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	plotnlon(nlong,nlon90,nlon45)
@@ -695,7 +754,7 @@ sta = procmap(s)
 s = grep("SETA=.+ LAT=.+ (D%)?NONL=",nd,value=TRUE)
 onl = procmap(s)
 
-pngalt("procmap.png")
+pngalt(sprintf("%s/procmap.png",cargs$png))
 ncomp = plotmap(sta,onl)
 pngoff()
 
@@ -736,7 +795,7 @@ if (! is.null(tt)) {
 	nt = c(0,100,200,500,1000,2000)
 	it = findInterval(nts,nt)
 
-	pngalt("runtime.png")
+	pngalt(sprintf("%s/runtime.png",cargs$png))
 	op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	its = seq(1,nts,by=pas[it])
 	dwall = c(0,diff(tt$wall))
@@ -753,7 +812,7 @@ if (nsttyp == 2) {
 	yp = 180/pi*asin(gem$mucen)
 	xlim = xp+c(-40,40)
 	ylim = yp+c(-20,20)
-	pngalt("pole.png")
+	pngalt(sprintf("%s/pole.png",cargs$png))
 	map("world",xlim=xlim,ylim=ylim)
 	points(xp,yp,pch="+",col="red")
 	text(xp,yp,sprintf("pole (lat/long): %.3g %.3g",yp,xp),pos=3,col="red")
