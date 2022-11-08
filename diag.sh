@@ -25,7 +25,7 @@ Dependencies:
 "
 }
 
-if [ $# -eq 0 ]
+if [ $# -eq 0 ] || echo " $*" | grep -qE ' \-h\>'
 then
 	usage
 	exit
@@ -67,10 +67,6 @@ do
 			;;
 		-nograph)
 			graph=0
-			;;
-		-h)
-			usage
-			exit
 			;;
 		*)
 			echo "Warning: unknown option '$1', ignored" >&2
@@ -135,11 +131,10 @@ fi
 ficdom=config/domain.txt
 [ ! -s $ficdom ] && ficdom=$diags/config/domain.txt
 
-doms=$(awk -F "(\t| )+" 'NR > 1 {print $1}' $ficdom | grep -vE '^ *#' | xargs)
+doms=$(grep -E '^ *\w+' $ficdom | awk 'NR > 1 {print $1}' | xargs)
 params=$(ls -1 $loc | grep -E 'map[1-9].+_\w+\.png$' | sed -re 's:.+_(\w+)\.png:\1:' | \
-	sort -u)
-nstep=$(wc -l $loc/steps.txt | awk '{print $1}')
-echo "HTML files: $nstep forecast steps
+	sort -u | xargs)
+echo "HTML files: $(cat $loc/steps.txt | wc -l) forecast steps
 domains: $doms"
 
 for par in $params
@@ -156,18 +151,18 @@ do
 
 		echo "<table>"
 		echo "<tr><th>Maps, selection of levels</th><th>Cross-sections and diagrams</th>"
-		att="colspan=\"2\""
+		att="colspan='2'"
 		if [ -n "$ref" ]
 		then
 			echo "<th>Maps for reference</th><th>Cross-sections and diagrams for ref</th>"
-			att="colspan=\"4\""
+			att="colspan='4'"
 		fi
 
 		echo "</tr>"
 
 		for dom in $doms
 		do
-			echo "<tr><th $att>Param '$par' - ${tt[*]} - Domain $dom</th><tr>"
+			echo "<tr><th name='title' $att>Param '$par' - ${tt[*]} - Domain $dom</th><tr>"
 			echo "<tr>"
 
 			for typ in map hist mapdiff histdiff
@@ -175,16 +170,59 @@ do
 				fic=$loc/$typ$it${dom}_$par.png
 				[ -s $fic ] || continue
 
-				printf "\t<td><img src=\"%s\" alt=\"missing image\"/></td>\n" $fic
+				printf "\t<td><img name='fig' src='%s' alt='missing image'/></td>\n" $fic
+			done
+
+			echo "</tr>"
+
+			cat $diags/step.html
+
+			echo "<tr><th colspan='2'>Param '$par' bias - Domain $dom</th><tr>"
+			echo "<tr>"
+
+			for typ in mapbias histbias
+			do
+				fic=$loc/$typ$it${dom}_$par.png
+				[ -s $fic ] || continue
+
+				printf "\t<td><img name='fig' src='%s' alt='missing image'/></td>\n" $fic
+			done
+
+			echo "<tr><th colspan='2'>Param '$par' RMSE - Domain $dom</th><tr>"
+			echo "<tr>"
+
+			for typ in maprmse histrmse
+			do
+				fic=$loc/$typ$it${dom}_$par.png
+				[ -s $fic ] || continue
+
+				printf "\t<td><img name='fig' src='%s' alt='missing image'/></td>\n" $fic
 			done
 
 			echo "</tr>"
 		done > $loc/idom.html
 
-		grep -q '<img src=' $loc/idom.html && cat $loc/idom.html
+		if grep -qE '<img .+ src=' $loc/idom.html
+		then
+			cat $loc/idom.html
+			echo "</table>"
+			break
+		fi
 
 		echo "</table>"
 	done < $loc/steps.txt
+
+	sed -re 's:TAG NAME:step:' -e "/TAG OPT/r $loc/steps.html" $diags/select.html
+	for dom in $doms
+	do
+		for typ in map hist mapdiff histdiff mapbias histbias maprmse histrmse
+		do
+			fic=$loc/$typ${dom}_$par.html
+			[ -s $fic ] || continue
+
+			sed -re 's:TAG NAME:map:' -e "/TAG OPT/r $fic" $diags/select.html
+		done
+	done
 
 	typd=("stat" "statv" "err" "errv" "score" "scorev" "scoret" "rmsevt")
 	titd=("Statistics of forecast" "Statistics of profile" "Statistics of forecast error" \
