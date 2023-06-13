@@ -123,13 +123,17 @@ if [ $graph -eq 1 ]
 then
 	type R > /dev/null 2>&1 || module -s load intel R > /dev/null 2>&1
 	R --slave -f $diags/diag.R --args fic=$fic params=$par level=$lev png=$loc $opt > \
-		$loc/out.txt
+		$loc/diag.log
 fi
 
 [ -n "$html" ] || exit
 
-ficdom=config/domain.txt
-[ ! -s $ficdom ] && ficdom=$diags/config/domain.txt
+ficdom=$conf/domain.txt
+if [ ! -s $ficdom ]
+then
+	echo "Error: no domains file '$ficdom'" >&2
+	exit 1
+fi
 
 doms=$(grep -E '^ *\w+' $ficdom | awk 'NR > 1 {print $1}' | xargs)
 params=$(ls -1 $loc | grep -E 'map[1-9].+_\w+\.png$' | sed -re 's:.+_(\w+)\.png:\1:' | \

@@ -154,6 +154,7 @@ getVars = function(con,grid,vars,quiet=FALSE)
 		lvar[[i]] = readBin(con,"numeric",nl*grid$npdg,endian="swap")
 		stopifnot(nx == readBin(con,"integer",1,endian="swap"))
 		dim(lvar[[i]]) = c(grid$npdg,nl)
+		names(lvar)[i] = varname
 		if (all(! sapply(lvar,is.null))) break
 	}
 
@@ -183,7 +184,7 @@ getFrame = function(file)
 
 	base = readBin(con,"numeric",1)
 	base = as.POSIXct(base,origin="1970-01-01")
-	step = readBin(con,"integer",1,size=8)
+	step = readBin(con,"numeric",1)
 	if (regexpr(".+\\+0*([0-9]+)",file) > 0) {
 		ech = as.integer(gsub(".+\\+0*([0-9]+)","\\1",file))
 		if (step != ech*3600) step = ech*3600
@@ -215,23 +216,42 @@ getFrame = function(file)
 	frame
 }
 
+formatStep = function(step,hour="")
+{
+	if (step %% 3600 == 0) {
+		sprintf("%d%s",step/3600,hour)
+	} else if (step %% 60 == 0) {
+		sprintf("%dm",step/60)
+	} else {
+		if (step != round(step)) warning("step is rounded to an int")
+		sprintf("%ds",round(step))
+	}
+}
+
 getField = function(fic,param,symbol,frame,frlow=frame)
 {
 	stopifnot(! is.null(frlow$ilev))
 
-	fsave = sprintf("%s/e%d/%s.RData",dirname(fic),frame$step/3600,symbol)
+	fsave = sprintf("%s/e%s/%s.RData",dirname(fic),formatStep(frame$step),symbol)
+
+	if (file.exists(fsave) && file.info(fsave)$mtime < file.info(fic)$mtime) {
+		file.remove(fsave)
+	}
+
+	if (! file.exists(fsave)) {
+		fsave = sprintf("%s/e%s/%s.2.RData",dirname(fic),formatStep(frame$step),symbol)
+		if (file.exists(fsave) && file.info(fsave)$mtime < file.info(fic)$mtime) {
+			file.remove(fsave)
+		}
+	}
 
 	if (file.exists(fsave)) {
 		ilev = 0
 		fic.save = ""
-		if (file.info(fsave)$mtime < file.info(fic)$mtime) {
-			file.remove(fsave)
-		} else {
-			load(fsave)
-		}
+		load(fsave)
 
 		if (! identical(ilev,frlow$ilev) || fic.save != fic) {
-			fsave = sprintf("%s/e%d/%s.2.RData",dirname(fic),frame$step/3600,symbol)
+			fsave = sprintf("%s/e%s/%s.2.RData",dirname(fic),formatStep(frame$step),symbol)
 			if (file.exists(fsave)) {
 				if (file.info(fsave)$mtime < file.info(fic)$mtime) {
 					file.remove(fsave)
@@ -290,7 +310,7 @@ getField = function(fic,param,symbol,frame,frlow=frame)
 
 	fic.save = fic
 	if (! file.exists(dirname(fsave))) dir.create(dirname(fsave))
-	save("data","ilev","fic.save",file=fsave)
+	save("data","ilev","base","step","fic.save",file=fsave)
 
 	data
 }
@@ -1762,7 +1782,8 @@ loadStat = function(filename,framep,paramsp,datesp,htimep)
 
 	lstatd = lapply(lstatd[indp],"[",indt)
 
-	if (is.array(lstat2d)) lstatd = c(lstatd,list(lstat2d[,,,,indt]))
+	indp = sapply(lstat2d,is.array)
+	if (any(indp)) lstatd = c(lstatd,lapply(lstat2d[indp],function(x) x[,,,,indt]))
 
 	lstatd
 }
@@ -1779,6 +1800,12 @@ descall = read.table(sprintf("%s/config/params.txt",Gdiags),header=TRUE)
 args = strsplit(commandArgs(trailingOnly=TRUE),split="=")
 cargs = lapply(args,function(x) unlist(strsplit(x[-1],split=":")))
 names(cargs) = sapply(args,function(x) x[1])
+
+nlatmax = 800
+if (file.exists("config/setting.R")) {
+	cat("--> reading constants:\n")
+	source("config/setting.R",echo=TRUE,spaced=FALSE)
+}
 
 if ("fic" %in% names(cargs)) {
 	dff = read.table(cargs$fic,header=TRUE)
@@ -1844,7 +1871,7 @@ fhtml = dir(pngd,"(map|hist)\\w+_\\w+\\.html",full.names=TRUE)
 if (length(fhtml) > 0) invisible(file.remove(fhtml))
 
 dstats = dstatd = array(dim=c(101,length(dates),length(dff$file),npar))
-lstat2 = lstat2d = vector("list",dim(desc2)[1])
+lstat2 = lstat2d = lerr2 = vector("list",dim(desc2)[1])
 names(lstat2) = names(lstat2d) = desc2$symbol
 lstat = lstatd = lerr = vector("list",npar)
 htime = integer(length(dff$file))
@@ -1890,14 +1917,7 @@ for (id in seq(along=dates)) {
 		}
 
 		cat("--> Gauss grid:",frame$gauss,"\n")
-		if (frame$step %% 60 != 0) {
-			s = sprintf("base/step: %s +%gs",base,frame$step)
-		} else if (frame$step %% 3600 != 0) {
-			s = sprintf("base/step: %s +%gmn",base,frame$step/60)
-		} else {
-			s = sprintf("base/step: %s +%gh",base,frame$step/3600)
-		}
-
+		s = sprintf("base/step: %s +%s",base,formatStep(frame$step),"h")
 		s = paste(s,sprintf("file: %s - graph: %s",fics[i],dff$graph[i]),sep=" - ")
 
 		if (is.na(tstep[i])) {
@@ -1932,7 +1952,7 @@ for (id in seq(along=dates)) {
 			stopifnot(frame$gauss == frame.save$gauss)
 		}
 
-		if (frame$nlat > 800) {
+		if (frame$nlat > nlatmax) {
 			cat("--> halving initial resolution:",frame$nlat,max(frame$nlong),"\n")
 			frlow = degrade(frame,nlat=2,nlon=2)
 		} else {
@@ -1961,6 +1981,7 @@ for (id in seq(along=dates)) {
 		yeta = rev(range(frlow$eta))
 
 		date = frame$base+frame$step
+		cat("--> validity:",strftime(date,"%Y%m%d %H"),"\n")
 		htime[i] = frame$step
 		ficref = sprintf("%s/%s/%s",ref,strftime(date,"%H/%Y%m%d"),dff$ref[i])
 		if (! file.exists(ficref)) {
@@ -1994,21 +2015,28 @@ for (id in seq(along=dates)) {
 			ss = desc$symbol[j]
 			nom = desc$longname[j]
 
-			if (regexpr("^\\.",desc$faname[j]) > 0) {
-				if (! isbin[i]) next
-
+			if (isbin[i] && regexpr("^\\.",desc$faname[j]) > 0) {
 				cat(". get field as diag",desc$faname[j],"\n")
 				data = ldata[[j]]
-				if (is.null(data)) next
+				if (is.null(data)) {
+					cat("--> field not found in .bin file\n")
+					next
+				}
+
 				if (dim(data)[2] > 1 && dim(data)[2] != length(frlow$ilev)) {
 					cat("--> change 'bin' levels:",dim(data)[2],"-->",length(frlow$ilev),"\n")
 					data = data[,frlow$ilev,drop=FALSE]
 				}
-			} else {
-				if (isbin[i]) next
-
+			} else if (! isbin[i] && regexpr("^\\.",desc$faname[j]) < 0) {
 				cat(". get fields matching pattern",patt,"\n")
 				data = getField(fics[i],patt,ss,frame,frlow)
+				if (is.null(data)) {
+					cat("--> field not found in FA/GRIB file\n")
+					next
+				}
+			} else {
+				cat("--> no field",desc$faname[j],"in",fics[i],"(OK)\n")
+				next
 			}
 
 			nl = dim(data)[2]
@@ -2112,6 +2140,9 @@ for (id in seq(along=dates)) {
 				lstatd[[j]] = array(dim=c(dim(qv),length(dates),length(fics)))
 			}
 			lstatd[[j]][,,,id,i] = qv
+
+			rm(data,datao)
+			gc()
 		}
 
 		if (! is.null(datax) && ! is.null(datay)) {
@@ -2126,7 +2157,8 @@ for (id in seq(along=dates)) {
 				u = ucs(nord,datax,datay)
 				v = vcs(nord,datax,datay)
 
-				pole = list(xlim=lonPole(frame)+c(-6,6),ylim=latPole(frame)+c(-5,5))
+				pole = list(xlim=lonPole(frame)+c(-6,6),ylim=latPole(frame)+c(-5,5),
+					proj="stereo")
 				x = zoom(u,frlow,pole)
 				y = zoom(v,frlow,pole)
 				pngalt(sprintf("%s/map%dpole_ff.png",pngd,i))
@@ -2141,7 +2173,8 @@ for (id in seq(along=dates)) {
 			if (is.null(lstat2[[1]])) {
 				lstat2[[1]] = array(dim=c(dim(qv),length(dates),length(fics)))
 			}
-			lstat2[[1]][,,id,i] = qv
+			lstat2[[1]][,,,id,i] = qv
+			rm(datax,datay)
 		}
 
 		if (! is.null(datal) && ! is.null(datam)) {
@@ -2153,7 +2186,7 @@ for (id in seq(along=dates)) {
 			if (is.null(lstat2[[2]])) {
 				lstat2[[2]] = array(dim=c(dim(qv),length(dates),length(fics)))
 			}
-			lstat2[[2]][,,id,i] = qv
+			lstat2[[2]][,,,id,i] = qv
 		}
 
 		if (! is.null(datagpl)) {
@@ -2164,7 +2197,8 @@ for (id in seq(along=dates)) {
 			if (is.null(lstat2[[3]])) {
 				lstat2[[3]] = array(dim=c(dim(qv),length(dates),length(fics)))
 			}
-			lstat2[[3]][,,id,i] = qv
+			lstat2[[3]][,,,id,i] = qv
+			rm(datal,datam)
 		}
 
 		if (! is.null(dataox) && ! is.null(dataoy)) {
@@ -2179,7 +2213,8 @@ for (id in seq(along=dates)) {
 				uo = ucs(nord,dataox,dataoy)
 				vo = vcs(nord,dataox,dataoy)
 
-				pole = list(xlim=lonPole(frame)+c(-6,6),ylim=latPole(frame)+c(-5,5))
+				pole = list(xlim=lonPole(frame)+c(-6,6),ylim=latPole(frame)+c(-5,5),
+					proj="stereo")
 				x = zoom(dataox,frlow,pole)
 				y = zoom(dataoy,frlow,pole)
 				pngalt(sprintf("%s/mapdiff%dpole_ff.png",pngd,i))
@@ -2198,11 +2233,18 @@ for (id in seq(along=dates)) {
 			print(summary(dbias))
 			print(summary(drms))
 
-			descff = data.frame(longname="wind speed",symbol="ff")
+			descff = descall[which(descall$symbol=="ff")[1],]
 			qv = mapexi(ffd,frlow,frmap,descff,doms,prefix=sprintf("diff%d",i),graph=gg)
-			if (is.null(lstat2d)) lstat2d = array(dim=c(dim(qv),length(dates),length(fics)))
-			lstat2d[,,id,i] = qv
+			if (is.null(lstat2d[[1]])) {
+				lstat2d[[1]] = array(dim=c(dim(qv),length(dates),length(fics)))
+				lerr2[[1]] = array(dim=c(dim(ffd),length(dates),length(fics)))
+			}
+			lstat2d[[1]][,,,id,i] = qv
+			lerr2[[1]][,,id,i] = ffd
+			rm(dataox,dataoy)
 		}
+
+		gc()
 	}
 }
 
@@ -2253,6 +2295,12 @@ if (nt < length(htime)) {
 	length(ht6) = nt
 }
 
+i2 = sapply(lstat2,is.array)
+if (any(i2)) {
+	lstat = c(lstat,lstat2[i2])
+	desc = rbind(desc,desc2[i2,])
+}
+
 if (length(fics) > 1) {
 if (FALSE) {
 	cat("Summary statistics of forecasts (whole domain, last (ie lowest) level)\n")
@@ -2276,19 +2324,9 @@ if (FALSE) {
 }
 
 	cat("Statistics of forecasts over",ndom,"domains\n")
-	longname = desc$longname
-	symbol = desc$symbol
-
-	i2 = sapply(lstat2,is.array)
-	if (any(i2)) {
-		lstat = c(lstat,lstat2[i2])
-		longname = c(longname,desc2$longname[i2])
-		symbol = c(symbol,desc2$symbol[i2])
-	}
-
 	for (j in seq(along=lstat)) {
-		ss = symbol[j]
-		nom = longname[j]
+		ss = desc$symbol[j]
+		nom = desc$longname[j]
 		cat(". param",nom,"\n")
 
 		nl = dim(lstat[[j]])[2]
@@ -2366,19 +2404,15 @@ if (FALSE) {
 }
 
 	cat("Scores of forecasts over",ndom,"domains\n")
-	longname = desc$longname
-	symbol = desc$symbol
-
 	i2 = sapply(lstat2d,is.array)
 	if (any(i2)) {
 		lstatd = c(lstatd,lstat2d[i2])
-		longname = c(desc$longname,desc2$longname[i2])
-		symbol = c(desc$symbol,desc2$symbol[i2])
+		lerr = c(lerr,lerr2[i2])
 	}
 
 	for (j in seq(along=lstatd)) {
-		ss = symbol[j]
-		nom = longname[j]
+		ss = desc$symbol[j]
+		nom = desc$longname[j]
 		cat(". param",ss,"\n")
 
 		nl = dim(lstatd[[j]])[2]
@@ -2534,7 +2568,7 @@ if (FALSE) {
 	descb = desc
 	descb$palette = "Blue-Red+"
 
-	for (j in seq(npar)) {
+	for (j in seq(along=lstatd)) {
 		cat(". param",desc$symbol[j],"\n")
 
 		for (i in seq(along=dff$file)) {
