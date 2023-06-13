@@ -67,7 +67,7 @@ gpnorm2D = function(nd)
 	surf[sapply(surf,length) > 0]
 }
 
-gpnorm = function(nd,lev,ind)
+gpnorm = function(nd,lev,ind,noms)
 {
 	if (missing(ind)) {
 		ind = grep("GPNORM +\\w+.* +AVERAGE",nd)
@@ -77,18 +77,35 @@ gpnorm = function(nd,lev,ind)
 
 	if (length(ind) == 0) stop("no GP norms")
 
+	if (missing(noms)) {
+		noms = unique(sub(" *GPNORM +(\\w+.+?) +AVERAGE.+","\\1",nd[ind]))
+	} else {
+		i = grep(sprintf(" *GPNORM +(%s)\\>",paste(noms,collapse="|")),nd[ind])
+		ind = ind[i]
+   }
+
 	indi = rep(ind,each=length(lev))+lev+1
 
 	gpn = line2num(nd[indi])
+
+	nt = length(gpn)/(3*length(lev)*length(noms))
+	if (nt > as.integer(nt)) {
+		nn = sapply(noms,function(x) length(grep(sprintf("\\<%s\\>",x),nd[ind])))
+		noms = noms[nn == max(nn)]
+		i = grep(sprintf(" *GPNORM +(%s)\\>",paste(noms,collapse="|")),nd[ind])
+		ind = ind[i]
+		indi = rep(ind,each=length(lev))+lev+1
+		gpn = line2num(nd[indi])
+		nt = length(gpn)/(3*length(lev)*length(noms))
+	}
+
+	stopifnot(nt == as.integer(nt))
 
 	noms = unique(sub(" *GPNORM +(\\w+.+?) +AVERAGE.+","\\1",nd[ind]))
 	noms[noms == "SURFACE PRESSURE"] = "SURF P"
 	noms[noms == "TEMPRATURE"] = "TEMP"
 	noms[noms == "U VELOCITY"] = "U VELOC."
 	noms[noms == "V VELOCITY"] = "V VELOC."
-
-	nt = length(gpn)/(3*length(lev)*length(noms))
-	stopifnot(nt == as.integer(nt))
 
 	dim(gpn) = c(3,length(lev),length(noms),nt)
 	gpl = aperm(gpn,c(4,2,1,3))
@@ -212,11 +229,11 @@ if (length(lev) == 0) {
 
 nstop = getvar("NSTOP",nd)
 tstep = getvar("TSTEP",nd)
-i1 = grep("START CNT4",nd)
+icnt4 = grep("^ *START CNT4",nd)[1]
 
 if (any(splot == "sp")) {
 	ind = grep("SPECTRAL NORMS",nd)
-	ind = ind[ind > i1]
+	ind = ind[ind > icnt4]
 	# ind2: for corrector (one line may be interleaved)
 	ind1 = grep(sub("spnorm t0","NORMS AT NSTEP CNT4",spref),nd[ind-1])
 	ind2 = grep(sub("spnorm t0","NORMS AT NSTEP CNT4",spref),nd[ind-2])
@@ -271,6 +288,11 @@ if (any(splot == "sp")) {
 		}
 	} else {
 		if (dim(sp1)[1] == 1) stop("1 time-step only (stop)\n")
+
+		if (any(sapply(spl,function(x) dim(x)[1]) > nt)) {
+			cat("--> limiting norms to",nt,"occurrences\n")
+			spl = lapply(spl,function(x) x[1:nt,,,drop=FALSE])
+		}
 
 		cat("Norm diff. tendency for patterns:\n",
 			paste(sprintf("'%s'",spre),collapse=" "),"\n")
@@ -342,12 +364,12 @@ if (any(splot == "sp")) {
 if (any(splot == "gp")) {
 	gpfre1 = "[UVW] VELOCITY|(SURFACE )?PRESSURE|TEMPERATURE|GRAD[LM]_\\w+|GEOPOTENTIAL"
 	gpfre2 = "MOIST AIR SPECIF|ISOBARE CAPACITY|SURFACE DIV|d\\(DIV\\)\\*dP"
-	gpfre3 = "(ATND|ADIAB|CTY|SISL)_\\w+"
+	gpfre3 = "(ATND|ADIAB|CTY|(SI)?SL)_\\w+"
 	gpfre = paste(gpfre1,gpfre2,gpfre3,sep="|")
 
 	if (type == "gpgfl") {
 		ind = grep("GPNORM +\\w+.* +AVERAGE",nd)
-		ind = ind[ind > i1]
+		ind = ind[ind > icnt4]
 		indo = grep(sprintf("GPNORM +(%s|OUTPUT) +AVERAGE",gpfre),nd[ind],invert=TRUE)
 		gp1 = gpnorm(nd,lev,ind[indo])
 		if (dim(gp1)[1] > 1) gp1 = gp1[-1,,,,drop=FALSE]
@@ -357,7 +379,7 @@ if (any(splot == "gp")) {
 	} else {
 		nl2 = 2+has.levels*nflevg
 		ind = grep(sprintf("GPNORM +(%s) +AVERAGE",gpfre),nd)
-		ind = ind[ind > i1]
+		ind = ind[ind > icnt4]
 		ind1 = grep(gpref,nd[ind-1],ignore.case=TRUE)
 		nf = countfield(ind,ind1,nl2)
 		indi = indexpand(ind[ind1],nf,nl2)

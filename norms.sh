@@ -101,7 +101,7 @@ do
 	if ! { file -L $xpdir/$fic | grep -qE "(ASCII|UTF-8 Unicode) text" &&
 		grep -qEi '^ \w+:\w+:\w+ +STEP +[0-9]+' $xpdir/$fic; }
 	then
-		echo "--> file not text or not model forecast" >&2
+		echo "--> file not text nor model forecast" >&2
 		continue
 	fi
 
