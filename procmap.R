@@ -12,6 +12,8 @@ longend = function(nd,ndglg)
 	ij = grep("\\( *JGL,NLOENG *\\)",nd)
 	if (length(ij) == 0) {
 		ij = grep("\\( *JGL,NLOENG,NMENG *\\)",nd)
+		if (length(ij) == 0) return(NULL)
+
 		is = grep("\\(JM,NDGLU\\)",nd)
 		ind = seq(ij+1,is-1)
 		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
@@ -117,9 +119,18 @@ spec = function(nd,ndglg)
 
 stdatm = function(nd,nflevg)
 {
-	ia = grep(" +pressure +temperature +height +density",nd,ignore.case=TRUE)
-	ind = ia+seq(nflevg)
 	snum = "-?\\d+\\.\\d+"
+
+	ia = grep(" +pressure +temperature +height +density",nd,ignore.case=TRUE)
+	if (length(ia) == 0) {
+		ia = grep("standard +atmosphere +height",nd,ignore.case=TRUE)
+		ind = ia+seq(nflevg)
+		ire = regexec(sprintf(" *\\d+ +(%s)",snum),nd[ind])
+		Z = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
+		return(data.frame(Z=Z))
+	}
+
+	ind = ia+seq(nflevg)
 	ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s) +(%s)",snum,snum,snum,snum),nd[ind])
 	P = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
 	T = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
@@ -204,7 +215,14 @@ silev = function(nd,nflevg)
 		knshd = rep(0,nflevg)
 	}
 
+	data.frame(sivp=sivp,sitlaf=sitlaf,sidphi=sidphi,pdi=pdi,pdis=pdis,knshd=knshd)
+}
+
+sicor = function(nd,nflevg)
+{
 	i1 = grep("SURCORDI",nd)
+	if (length(i1) == 0) return(NULL)
+
 	i2 = grep("Set up relaxation",nd,ignore.case=TRUE)
 	if (length(i2) == 0) i2 = grep("NSLDIMK *=",nd,ignore.case=TRUE)
 	ind = seq(i1+1,i2-1)
@@ -219,8 +237,7 @@ silev = function(nd,nflevg)
 	il = ind[-(1:ic[3])]
 	rcordif = numlines(nd[il])
 
-	data.frame(sivp=sivp,sitlaf=sitlaf,sidphi=sidphi,pdi=pdi,pdis=pdis,knshd=knshd,
-		rcordit=rcordit,rcordif=rcordif,rcordih=rcordih)
+	data.frame(rcordit=rcordit,rcordif=rcordif,rcordih=rcordih)
 }
 
 cuico = function(nd,nflevg)
@@ -474,6 +491,7 @@ if (! "png" %in% names(cargs)) cargs$png = "."
 
 nd = readLines(cargs$ficin)
 
+cat("Grid information\n")
 nproc = getvar("NPROC",nd)
 nprgpns = getvar(".*\\<NPRGPNS",nd)
 ndglg = getvar("NDGLG",nd)
@@ -481,9 +499,8 @@ ndgnh = ndglg%/%2
 ndlon = getvar("NDLON",nd)
 ig = grep("NGPTOTG",nd)
 ngptot = as.integer(strsplit(gsub("^ *","",nd[ig+1])," +")[[1]])
-nlong = longend(nd,ndglg)
 
-cat("Write geometry namelist for FPOS jobs\n")
+cat("Grid type and truncature\n")
 gem = getgem(nd)
 nsmax = getvar("NSMAX",nd)
 nmsmax = getvar("NSMAX.+NMSMAX",nd)
@@ -491,11 +508,17 @@ nsttyp = getvar("NSTTYP",nd)
 if (length(nsttyp) == 0) nsttyp = getvar(".+ NSTTYP",nd)
 nhtyp = getvar("NHTYP",nd)
 if (length(nhtyp) == 0) nhtyp = getvar(".+ NHTYP",nd)
+nlong = longend(nd,ndglg)
+if (is.null(nlong)) {
+	cat("--> nlong guessed with NDLON/NDGLG\n")
+	nlong = rep(ndlon,ndglg)
+}
 
 nflevg = getvar("NFLEVG",nd)
 ab = abh(nd,nflevg)
 eta = ab$alpha+ab$Bh
 
+cat("Write geometry namelist for FPOS jobs\n")
 con = file(sprintf("%s/fp.txt",cargs$png),"w")
 cat("&NAMFPD\nNLAT =",ndglg,"\nNLON =",ndlon,"\n/\n",file=con)
 cat("&NAMFPG\n",file=con)
@@ -510,10 +533,34 @@ ind = grep("[&*/\\] *nam\\w+",nfp,invert=TRUE,ignore.case=TRUE)
 nfp[ind] = sub("([.0-9]) *$","\\1,",nfp[ind])
 writeLines(nfp,sprintf("%s/fp.txt",cargs$png))
 
+cat("Standard atmosphere\n")
 std = stdatm(nd,nflevg)
-itropo = getvar("SUSTA: CLOSEST FULL LEVEL",nd,":")
-itropt = which(std$T == std$T[itropo-1])[1]
+pngalt(sprintf("%s/stdatm.png",cargs$png))
+ttstd = "Standard atmosphere"
+if (dim(std)[2] == 1) {
+	itropo = itropt = NA_integer_
+	op = par(mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	plot(seq(nflevg),std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Height of level"),
+		xlab="Level",ylab="Height above MSL (m)")
+} else {
+	itropo = getvar("SUSTA: CLOSEST FULL LEVEL",nd,":")
+	itropt = which(std$T == std$T[itropo-1])[1]
+	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	plot(std$P/100,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Pressure"),
+		xlab="Pressure (hPa)",ylab="Z (mgp)",cex=1.5)
+	abline(h=c(0,std$Z[c(itropt,itropo)]),lty=2)
+	plot(std$T-273.15,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Temperature (°C)"),
+		xlab="Temperature",ylab="Z (mgp)",cex=1.5)
+	abline(h=c(0,std$Z[c(itropt,itropo)]),lty=2)
+	abline(v=0,lty=1)
+	plot(std$rho,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Density of air"),
+		xlab="Density (-)",ylab="Z (mgp)",cex=1.5)
+	abline(h=c(0,std$Z[c(itropt,itropo)]),lty=2)
+}
 
+pngoff(op)
+
+cat("Vertical coordinate (1)\n")
 pngalt(sprintf("%s/eta.png",cargs$png))
 tt = c("Vertical hybrid coordinate",
 	sprintf("%d levels - tropopause: ~%d-%d",nflevg,itropt,itropo))
@@ -523,6 +570,7 @@ legend("topleft",c("Bh","Ah/Pref",expression(eta)),lty=1,pch="|",col=1:3,inset=.
 abline(h=0,col="darkgrey")
 pngoff()
 
+cat("Vertical coordinate (2)\n")
 pngalt(sprintf("%s/levels.png",cargs$png))
 op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 ss = "Layer interfaces"
@@ -538,26 +586,10 @@ plot(ab$Ah,0:nflevg,type="o",lty=1,pch="-",main=c("Coefficient A/Pref",ss),
 abline(h=c(itropt,itropo),lty=2)
 pngoff(op)
 
-pngalt(sprintf("%s/stdatm.png",cargs$png))
-op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-ttstd = "Standard atmosphere"
-plot(std$P/100,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Pressure"),
-	xlab="Pressure (hPa)",ylab="Z (mgp)",cex=1.5)
-abline(h=c(0,std$Z[c(itropt,itropo)]),lty=2)
-plot(std$T-273.15,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Temperature (°C)"),
-	xlab="Temperature",ylab="Z (mgp)",cex=1.5)
-abline(h=c(0,std$Z[c(itropt,itropo)]),lty=2)
-abline(v=0,lty=1)
-plot(std$rho,std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Density of air"),
-	xlab="Density (-)",ylab="Z (mgp)",cex=1.5)
-abline(h=c(0,std$Z[c(itropt,itropo)]),lty=2)
-pngoff(op)
-
 rinte = vfe(nd,nflevg,"RINTE")
 pngalt(sprintf("%s/vfeint.png",cargs$png))
 if (is.null(rinte)) {
-	op = par(pch="",xaxt="n",yaxt="n")
-	plot(1,xlab="",ylab="")
+	plot(1,xlab="",ylab="",pch="",xaxt="n",yaxt="n")
 	text(1,1,"no VFE array RINTE")
 } else {
 	ilev = c(1,nflevg%/%2,nflevg,nflevg+1)
@@ -581,8 +613,7 @@ pngoff(op)
 rderi = vfe(nd,nflevg,"RDERI")
 pngalt(sprintf("%s/vfeder.png",cargs$png))
 if (is.null(rderi)) {
-	op = par(pch="",xaxt="n",yaxt="n")
-	plot(1,xlab="",ylab="")
+	plot(1,xlab="",ylab="",pch="",xaxt="n",yaxt="n")
 	text(1,1,"no VFE array RDERI")
 } else {
 	ilev = c(1,nflevg%/%2,nflevg,nflevg+1)
@@ -613,7 +644,7 @@ plot(si$sidphi,1:nflevg,type="o",lty=1,pch="-",main="SIDPHI: diff. of geopotenti
 pngoff(op)
 
 pngalt(sprintf("%s/sihd.png",cargs$png))
-op = par(mfrow=c(2,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 plot(si$pdi/100,1:nflevg,type="l",lty=1,main="PDILEV: 1+7.5*(3-log10(P))",
 	xlab="PDILEV (hPa)",ylab="Level",ylim=ylim,cex=1.5)
 if (all(si$pdi == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
@@ -622,15 +653,26 @@ plot(si$pdis/100,1:nflevg,type="l",lty=1,main="PDILEVS: cf PDILEV)",
 plot(si$knshd,1:nflevg,type="l",lty=1,main="KNSHD",xlab="KNSHD",ylab="Level",ylim=ylim,
 	cex=1.5)
 if (all(si$knshd == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
-plot(si$rcordit,1:nflevg,type="l",lty=1,main="RCORDIT (tropo)",xlab="RCORDIT",
-	ylab="Level",ylim=ylim,cex=1.5)
-if (all(si$rcordit == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
-plot(si$rcordih,1:nflevg,type="l",lty=1,main="RCORDIH",xlab="RCORDIH",ylab="Level",
-	ylim=ylim,cex=1.5)
-if (all(si$rcordih == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
-plot(si$rcordif,1:nflevg,type="l",lty=1,main="RCORDIF",xlab="RCORDIF",ylab="Level",
-	ylim=ylim,cex=1.5)
-if (all(si$rcordif == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
+pngoff(op)
+
+cor = sicor(nd,nflevg)
+pngalt(sprintf("%s/sicor.png",cargs$png))
+if (is.null(cor)) {
+	op = par(xaxt="n",yaxt="n")
+	plot(1,xlab="",ylab="",col=0)
+	text(1,1,"no CORDI")
+} else {
+	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	plot(cor$rcordit,1:nflevg,type="l",lty=1,main="RCORDIT (tropo)",xlab="RCORDIT",
+		ylab="Level",ylim=ylim,cex=1.5)
+	if (all(cor$rcordit == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
+	plot(cor$rcordih,1:nflevg,type="l",lty=1,main="RCORDIH",xlab="RCORDIH",ylab="Level",
+		ylim=ylim,cex=1.5)
+	if (all(cor$rcordih == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
+	plot(cor$rcordif,1:nflevg,type="l",lty=1,main="RCORDIF",xlab="RCORDIF",ylab="Level",
+		ylim=ylim,cex=1.5)
+	if (all(cor$rcordif == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
+}
 pngoff(op)
 
 cat("Spectral and vertical partitionning\n")
@@ -650,73 +692,80 @@ if (length(nprtrw) == 0) {
 	nprtrv = getvar("NPRTRV",nd)
 }
 
-sp = spec(nd,ndglg)
-nm = length(sp$ndglu)-1
+sp = try(spec(nd,ndglg))
+if (! is(sp,"try-error")) {
+	nm = length(sp$ndglu)-1
 
-pngalt(sprintf("%s/specgp.png",cargs$png))
-op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-ss = sprintf("nmeng: %d... %d",min(sp$nmeng),max(sp$nmeng))
-plot(sp$nmeng,type="l",main=c("Wave cut-off per latitude",ss),xlab="Latitude index",
-	ylab="Nb of waves",xaxt="n")
-axis(1,pretty(seq(along=sp$nmeng)/8,8)*8)
-ss = sprintf("ndglu: %d... %d",min(sp$ndglu),max(sp$ndglu))
-plot(0:nm,sp$ndglu,type="l",main=c("Nb of longitudes per wave",ss),
-	xlab="Wave index 'jm'",ylab="Nb of longitudes",xaxt="n")
-axis(1,pretty((seq(along=sp$ndglu)-1)/8,8)*8)
-pngoff(op)
+	pngalt(sprintf("%s/specgp.png",cargs$png))
+	op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	ss = sprintf("nmeng: %d... %d",min(sp$nmeng),max(sp$nmeng))
+	plot(sp$nmeng,type="l",main=c("Wave cut-off per latitude",ss),xlab="Latitude index",
+		ylab="Nb of waves",xaxt="n")
+	axis(1,pretty(seq(along=sp$nmeng)/8,8)*8)
+	ss = sprintf("ndglu: %d... %d",min(sp$ndglu),max(sp$ndglu))
+	plot(0:nm,sp$ndglu,type="l",main=c("Nb of longitudes per wave",ss),
+		xlab="Wave index 'jm'",ylab="Nb of longitudes",xaxt="n")
+	axis(1,pretty((seq(along=sp$ndglu)-1)/8,8)*8)
+	pngoff(op)
 
-pngalt(sprintf("%s/specproc.png",cargs$png))
-op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-pr = unlist(lapply(seq(along=sp$numpp),function(i) rep(i,each=sp$numpp[i])))
-np = length(sp$nprocm)-1
-plot(0:np,sp$nprocm,type="h",main=c("W-set and waves","'nprocm'"),xlab="Wave index 'jm'",
-	ylab="W-set index")
-if (any(sp$nprocm == 0)) text(np/2,max(sp$nprocm)/2,"NPROCM not fully decoded",.5,col=2)
-plot(sp$nallms,type="h",main=c("Waves and W-set","'nallms'"),
-	xlab="W-set index (nb of waves 'numpp')",ylab="Wave index 'jm'",lwd=1.5,
-	col=(pr-1)%%8+1,xaxt="n")
-x = cumsum(sp$numpp)
-axis(1,c(x[1]/2,(x[-1]+x[-length(x)])/2),sprintf("%d (%d)",seq(sp$numpp),sp$numpp))
-if (any(duplicated(sp$nallms))) {
-	stopifnot(all(! duplicated(sp$nallms[sp$nallms!=0])))
-	text(nm/2,nm/2,"NALLMS not fully decoded",.5,col=2)
+	pngalt(sprintf("%s/specproc.png",cargs$png))
+	op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	pr = unlist(lapply(seq(along=sp$numpp),function(i) rep(i,each=sp$numpp[i])))
+	np = length(sp$nprocm)-1
+	plot(0:np,sp$nprocm,type="h",main=c("W-set and waves","'nprocm'"),xlab="Wave index 'jm'",
+		ylab="W-set index")
+	if (any(sp$nprocm == 0)) text(np/2,max(sp$nprocm)/2,"NPROCM not fully decoded",.5,col=2)
+	plot(sp$nallms,type="h",main=c("Waves and W-set","'nallms'"),
+		xlab="W-set index (nb of waves 'numpp')",ylab="Wave index 'jm'",lwd=1.5,
+		col=(pr-1)%%8+1,xaxt="n")
+	x = cumsum(sp$numpp)
+	axis(1,c(x[1]/2,(x[-1]+x[-length(x)])/2),sprintf("%d (%d)",seq(sp$numpp),sp$numpp))
+	if (any(duplicated(sp$nallms))) {
+		stopifnot(all(! duplicated(sp$nallms[sp$nallms!=0])))
+		text(nm/2,nm/2,"NALLMS not fully decoded",.5,col=2)
+	}
+	pngoff(op)
+
+	pngalt(sprintf("%s/vset.png",cargs$png))
+	plot(sp$nbsetlev,1:nflevg,type="p",ylim=ylim,main="V-set and levels",xlab="V-set",
+		ylab="Level",pch="-")
+	pngoff()
+
+	pngalt(sprintf("%s/speclap.png",cargs$png))
+	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	plot(sp$rlapdi,type="l",main=c("Eigen-values of the Laplacian","'rlapdi'"),
+		xlab="Wave index 'jm'",ylab="Eigen-value")
+	plot(sp$rlapin,type="l",main=c("Eigen-values of inverse of Laplacian","'rlapin'"),
+		xlab="Wave index 'jm'",ylab="Eigen-value")
+	plot(sp$rlapin,type="l",xlim=c(1,min(ndglg,20)),main="First Eigen-values 'rlapin'",
+		xlab="Wave index 'jm'",ylab="Eigen-value")
+	pngoff(op)
 }
-pngoff(op)
-
-pngalt(sprintf("%s/vset.png",cargs$png))
-plot(sp$nbsetlev,1:nflevg,type="p",ylim=ylim,main="V-set and levels",xlab="V-set",
-	ylab="Level",pch="-")
-pngoff()
-
-pngalt(sprintf("%s/speclap.png",cargs$png))
-op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-plot(sp$rlapdi,type="l",main=c("Eigen-values of the Laplacian","'rlapdi'"),
-	xlab="Wave index 'jm'",ylab="Eigen-value")
-plot(sp$rlapin,type="l",main=c("Eigen-values of inverse of Laplacian","'rlapin'"),
-	xlab="Wave index 'jm'",ylab="Eigen-value")
-plot(sp$rlapin,type="l",xlim=c(1,min(ndglg,20)),main="First Eigen-values 'rlapin'",
-	xlab="Wave index 'jm'",ylab="Eigen-value")
-pngoff(op)
 
 cat("Vertical cubic weights (SL)\n")
 vintw = cuico(nd,nflevg)
 gamma = weno(nd,nflevg)
 
 pngalt(sprintf("%s/vintw.png",cargs$png))
-op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-nl3 = nflevg-3
-ntop = min(nl3,5)
-nmid = max(ntop,1+nl3/2)
-matplot(abs(vintw[,2:4]),1:nl3,type="o",lty=1,pch="-",
-	main="Cubic weight for vert. interp.",xlab="abs(Weight)",ylab="Level",ylim=c(nl3,1),
-	log="x")
-legend("bottomright",sprintf("w(,%d)",2:4),lty=1,col=1:3)
-matplot(abs(vintw[1:ntop,2:4]),1:ntop,type="o",lty=1,pch="-",
-	main="Weight at top levels",xlab="abs(Weight)",ylab="Level",ylim=c(ntop,1))
-matplot(abs(vintw[ntop:nmid,2:4]),ntop:nmid,type="o",lty=1,pch="-",
-	main="Weight at mid levels",xlab="abs(Weight)",ylab="Level",ylim=c(nmid,ntop))
-matplot(abs(vintw[nmid:nl3,2:4]),nmid:nl3,type="o",lty=1,pch="-",
-	main="Weight at bottom",xlab="abs(Weight)",ylab="Level",ylim=c(nl3,nmid))
+if (all(is.na(vintw))) {
+	plot(1,xaxt="n",yaxt="n",xlab="",ylab="",pch="")
+	text(1,1,"no vertical cubic weights (VINTW)")
+} else {
+	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	nl3 = nflevg-3
+	ntop = min(nl3,5)
+	nmid = max(ntop,1+nl3/2)
+	matplot(abs(vintw[,2:4]),1:nl3,type="o",lty=1,pch="-",
+		main="Cubic weight for vert. interp.",xlab="abs(Weight)",ylab="Level",ylim=c(nl3,1),
+		log="x")
+	legend("bottomright",sprintf("w(,%d)",2:4),lty=1,col=1:3)
+	matplot(abs(vintw[1:ntop,2:4]),1:ntop,type="o",lty=1,pch="-",
+		main="Weight at top levels",xlab="abs(Weight)",ylab="Level",ylim=c(ntop,1))
+	matplot(abs(vintw[ntop:nmid,2:4]),ntop:nmid,type="o",lty=1,pch="-",
+		main="Weight at mid levels",xlab="abs(Weight)",ylab="Level",ylim=c(nmid,ntop))
+	matplot(abs(vintw[nmid:nl3,2:4]),nmid:nl3,type="o",lty=1,pch="-",
+		main="Weight at bottom",xlab="abs(Weight)",ylab="Level",ylim=c(nl3,nmid))
+}
 pngoff(op)
 
 pngalt(sprintf("%s/weno.png",cargs$png))
@@ -749,21 +798,28 @@ if (length(unique(nlong)) == 1) {
 }
 
 cat("Grid-point mapping wrt MPI tasks\n")
-s = grep("SETA=.+ LAT=.+ NSTA=",nd,value=TRUE)
-sta = procmap(s)
-s = grep("SETA=.+ LAT=.+ (D%)?NONL=",nd,value=TRUE)
-onl = procmap(s)
-
-pngalt(sprintf("%s/procmap.png",cargs$png))
-ncomp = plotmap(sta,onl)
-pngoff()
-
-ngp = min(ngptot)
 ndim = c(nproc,nprgpns,ndglg,ndlon,min(ngptot),max(ngptot))
 cat("Values from log file (nproc/nprgpns/ndglg/ndlon/ngptot/ngptotg):\n",ndim,"\n")
-if (any(ncomp != ndim)) cat("--> computed values differ from log file:\n",ncomp,"\n")
+
+s = grep("SETA=.+ LAT=.+ NSTA=",nd,value=TRUE)
+pngalt(sprintf("%s/procmap.png",cargs$png))
+if (length(s) == 0) {
+	plot(1,xaxt="n",yaxt="n",xlab="",ylab="",pch="")
+	text(1,1,"no map of MPI tasks")
+} else {
+	sta = procmap(s)
+	s = grep("SETA=.+ LAT=.+ (D%)?NONL=",nd,value=TRUE)
+	onl = procmap(s)
+
+	ncomp = plotmap(sta,onl)
+
+	if (any(ncomp != ndim)) cat("--> computed values differ from log file:\n",ncomp,"\n")
+}
+pngoff()
 
 if (any(regexpr("LSLAG *= *T(RUE)?",nd) > 0)) {
+	ngp = min(ngptot)
+	cat("SL scheme information\n")
 	naslb1 = getvar("\\w.+ YDSL%NASLB1",nd)
 	nslrpt = getvar("SLRSET: +NSLRPT",nd)
 	nslspt = getvar("SLRSET: +NSLSPT",nd)
@@ -791,8 +847,8 @@ if (! is.null(tt)) {
 	sstt = sprintf("setup+step0, forecast, total: %gs, %gs, %gs",t0,tint,total)
 	cat(sstt,"\n")
 
-	pas = c(1,2,5,10,20,40,50)
-	nt = c(0,100,200,500,1000,2000)
+	pas = c(1,2,3,5,6,10,15,20,40,50)
+	nt = c(0,200,400,600,1200,2000,3000,4000,8000,10000)
 	it = findInterval(nts,nt)
 
 	pngalt(sprintf("%s/runtime.png",cargs$png))

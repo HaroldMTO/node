@@ -65,8 +65,22 @@ png: '$png'" >&2
 fi
 
 ls -L $fin > /dev/null
-file -L $fin | grep -q text
-grep -qi 'END OF SETUPS' $fin
+
+if ! file -L $fin | grep -q text
+then
+	ftmp=$(mktemp --tmpdir)
+	cat $fin | tr -d '\0' > $ftmp
+
+	if ! file -L $ftmp | grep -q text
+	then
+		echo "$fin is not a text file" >&2
+		exit 1
+	fi
+
+	fin=$ftmp
+fi
+
+grep -qi 'END OF SETUPS' $fin || echo "Warning: no text \"END OF SETUPS\" in $fin" >&2
 
 type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
 
@@ -75,21 +89,21 @@ then
 	if echo $fin | grep -qEi '(.+/)?\<node\.?\w+'
 	then
 		png=$(echo $fin | sed -re 's:(.+/)?\<node\.?(\w+):\1\2:i')
-		mkdir -p $png
 	else
 		loc=$(dirname $fin)
 		png=$(mktemp -d -p $loc setupXXX)
 	fi
 fi
 
+mkdir -p $png
 echo "--> output dir is $png"
 
 R --slave -f $diags/procmap.R --args ficin=$fin png=$png > $png/out.txt
 
 {
 	echo "<pre>"
-	grep -A 1 -iw values $png/out.txt
-	grep -w SL $png/out.txt
+	grep -A 1 -iw values $png/out.txt || true
+	grep -w SL $png/out.txt || true
 	echo "</pre>"
 } > $png/map.txt
 
