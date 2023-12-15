@@ -31,6 +31,48 @@ longend = function(nd,ndglg)
 	nloeng[off+seq(ndglg%/%2)]
 }
 
+wavend = function(nd,ndglg)
+{
+	ij = grep("\\( *JGL,NMENG *\\)",nd)
+	if (length(ij) == 0) {
+		ij = grep("\\( *JGL,NLOENG,NMENG *\\)",nd)
+		is = grep("\\(JM,NDGLU\\)",nd)
+		ind = seq(ij+1,is-1)
+		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
+		nmeng = as.integer(gsub("\\( *-?\\d+ +\\d+ +(\\d+)\\)","\\1",s))
+	} else {
+		is = grep("\\( *JM,NDGLU *\\)",nd)
+		ind = seq(ij+1,is-1)
+		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
+		nmeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
+	}
+
+	off = (length(nmeng)-ndglg)/2
+	nmeng[off+seq(ndglg%/%2)]
+}
+
+specnb = function(nd)
+{
+	ij = grep("\\( *JM,NDGLU *\\)",nd)
+	is = grep("Set up distributed",nd)
+	ind = seq(ij+1,is-1)
+	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
+	ndglu = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
+
+	ndglu
+}
+
+wavenb = function(nd)
+{
+	i1 = grep("^ *\\(JGL,NLOEN,NMEN\\)",nd)
+	i2 = grep("^ *ARRAY +NSTAGP +ALLOCATED",nd)
+	ind = seq(i1+1,i2-1)
+	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
+	nmen = as.integer(gsub("\\( *\\d+ +\\d+ +(\\d+)\\)","\\1",s))
+
+	nmen
+}
+
 intlines = function(nd)
 {
 	as.integer(unlist(regmatches(nd,gregexpr(Gint,nd))))
@@ -41,7 +83,7 @@ numlines = function(nd)
 	as.numeric(unlist(regmatches(nd,gregexpr(Gnum,nd))))
 }
 
-spec = function(nd,ndglg)
+spec = function(nd)
 {
 	i1 = grep("^ *NUMPP\\>",nd)
 	i2 = grep("NUMBER OF THREADS",nd)
@@ -75,35 +117,6 @@ spec = function(nd,ndglg)
 	ind = seq(i1+1,i2[1]-1)
 	myms = intlines(nd[ind])
 
-	ij = grep("\\( *JGL,NMENG *\\)",nd)
-	if (length(ij) == 0) {
-		ij = grep("\\( *JGL,NLOENG,NMENG *\\)",nd)
-		is = grep("\\(JM,NDGLU\\)",nd)
-		ind = seq(ij+1,is-1)
-		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
-		nmeng = as.integer(gsub("\\( *-?\\d+ +\\d+ +(\\d+)\\)","\\1",s))
-	} else {
-		is = grep("\\( *JM,NDGLU *\\)",nd)
-		ind = seq(ij+1,is-1)
-		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
-		nmeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
-	}
-
-	off = (length(nmeng)-ndglg)/2
-	nmeng = nmeng[off+seq(ndglg%/%2)]
-
-	ij = grep("\\( *JM,NDGLU *\\)",nd)
-	is = grep("Set up distributed",nd)
-	ind = seq(ij+1,is-1)
-	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
-	ndglu = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
-
-	i1 = grep("^ *\\(JGL,NLOEN,NMEN\\)",nd)
-	i2 = grep("^ *ARRAY +NSTAGP +ALLOCATED",nd)
-	ind = seq(i1+1,i2-1)
-	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
-	nmen = as.integer(gsub("\\( *\\d+ +\\d+ +(\\d+)\\)","\\1",s))
-
 	i1 = grep("^ *EIGEN-VALUES OF THE LAPLACIAN",nd)
 	i2 = grep("^ *EIGEN-VALUES OF ITS INVERSE",nd)
 	i3 = grep("^ *((YDLAP%)?NASM0G|YDLEP%NESM0G)",nd)
@@ -114,7 +127,7 @@ spec = function(nd,ndglg)
 	rlapin = numlines(nd[ind])
 
 	list(numpp=numpp,nprocm=nprocm,nallms=nallms,mylevs=mylevs,nbsetlev=nbsetlev,myms=myms,
-		nmeng=nmeng,ndglu=ndglu,nmen=nmen,rlapdi=rlapdi,rlapin=rlapin)
+		rlapdi=rlapdi,rlapin=rlapin)
 }
 
 stdatm = function(nd,nflevg)
@@ -692,22 +705,28 @@ if (length(nprtrw) == 0) {
 	nprtrv = getvar("NPRTRV",nd)
 }
 
-sp = try(spec(nd,ndglg))
-if (! is(sp,"try-error")) {
-	nm = length(sp$ndglu)-1
+sp = try(spec(nd))
+nmeng = try(wavend(nd,ndglg))
+ndglu = try(specnb(nd))
+#nmen = wavenb(nd)
+
+if (! is(ndglu,"try-error") && ! is(nmeng,"try-error")) {
+	nm = length(ndglu)-1
 
 	pngalt(sprintf("%s/specgp.png",cargs$png))
 	op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-	ss = sprintf("nmeng: %d... %d",min(sp$nmeng),max(sp$nmeng))
-	plot(sp$nmeng,type="l",main=c("Wave cut-off per latitude",ss),xlab="Latitude index",
+	ss = sprintf("nmeng: %d... %d",min(nmeng),max(nmeng))
+	plot(nmeng,type="l",main=c("Wave cut-off per latitude",ss),xlab="Latitude index",
 		ylab="Nb of waves",xaxt="n")
-	axis(1,pretty(seq(along=sp$nmeng)/8,8)*8)
-	ss = sprintf("ndglu: %d... %d",min(sp$ndglu),max(sp$ndglu))
-	plot(0:nm,sp$ndglu,type="l",main=c("Nb of longitudes per wave",ss),
+	axis(1,pretty(seq(along=nmeng)/8,8)*8)
+	ss = sprintf("ndglu: %d... %d",min(ndglu),max(ndglu))
+	plot(0:nm,ndglu,type="l",main=c("Nb of longitudes per wave",ss),
 		xlab="Wave index 'jm'",ylab="Nb of longitudes",xaxt="n")
-	axis(1,pretty((seq(along=sp$ndglu)-1)/8,8)*8)
+	axis(1,pretty((seq(along=ndglu)-1)/8,8)*8)
 	pngoff(op)
+}
 
+if (! is(sp,"try-error")) {
 	pngalt(sprintf("%s/specproc.png",cargs$png))
 	op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	pr = unlist(lapply(seq(along=sp$numpp),function(i) rep(i,each=sp$numpp[i])))
