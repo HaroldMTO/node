@@ -7,6 +7,18 @@ getvar = function(var,nd,sep="=")
 	unique(as.numeric(gsub(re,"\\1",grep(re,nd,value=TRUE))))
 }
 
+getgem = function(nd)
+{
+	#ig = grep("Printings in SUGEM_NAML",nd,ignore.case=TRUE)
+	ig = grep("RMUCEN.+ RLOCEN.+RSTRET",nd,ignore.case=TRUE)
+	mucen = as.numeric(sub(sprintf(".* RMUCEN *= *(%s).*",Gnum),"\\1",nd[ig]))
+	locen = as.numeric(sub(sprintf(".* RLOCEN *= *(%s).*",Gnum),"\\1",nd[ig]))
+	stret = as.numeric(sub(sprintf(".* RSTRET *= *(%s).*",Gnum),"\\1",nd[ig]))
+	nlginc = as.numeric(sub(sprintf(".* RNLGINC *= *(%s).*",Gnum),"\\1",nd[ig+2]))
+
+	list(mucen=mucen,locen=locen,stret=stret,nlginc=nlginc)
+}
+
 longend = function(nd,ndglg)
 {
 	ij = grep("\\( *JGL,NLOENG *\\)",nd)
@@ -83,10 +95,10 @@ numlines = function(nd)
 	as.numeric(unlist(regmatches(nd,gregexpr(Gnum,nd))))
 }
 
-spec = function(nd)
+specdis = function(nd)
 {
 	i1 = grep("^ *NUMPP\\>",nd)
-	i2 = grep("NUMBER OF THREADS",nd)
+	i2 = grep("MAXIMUM NUMBER OF THREADS",nd)
 	ind = seq(i1+1,i2-1)
 	numpp = intlines(nd[ind])
 
@@ -163,6 +175,18 @@ abh = function(nd,nflevg)
 	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
 	ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",4))
 	data.frame(Ah=ah,Bh=bh,alpha=alh)
+}
+
+abhfp = function(nd,nfplev)
+{
+	ih = grep("Set up F-post processing, vertical geometry",nd)
+	ind = ih+1+seq(nfplev+1)
+	snum = "-?\\d+\\.\\d+"
+	ire = regexec(sprintf(" *FPVALH\\(( *\\d+|\\*)+\\) *= *(%s) +FPVBH\\(( *\\d+|\\*+)\\) *= *(%s)",
+		snum,snum),nd[ind])
+	ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
+	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",5))
+	data.frame(Ah=ah,Bh=bh)
 }
 
 vfe = function(nd,nflevg,oper)
@@ -288,15 +312,62 @@ weno = function(nd,nflevg)
 	t(gamma)
 }
 
-getgem = function(nd)
+mesodrag = function(nd,nflevg)
 {
-	ig = grep("Printings in SUGEM_NAML",nd,ignore.case=TRUE)
-	mucen = as.numeric(sub(sprintf(".* RMUCEN *= *(%s).*",Gnum),"\\1",nd[ig+1]))
-	locen = as.numeric(sub(sprintf(".* RLOCEN *= *(%s).*",Gnum),"\\1",nd[ig+1]))
-	stret = as.numeric(sub(sprintf(".* RSTRET *= *(%s).*",Gnum),"\\1",nd[ig+1]))
-	nlginc = as.numeric(sub(sprintf(".* RNLGINC *= *(%s).*",Gnum),"\\1",nd[ig+3]))
+	snum = "-?\\d+\\.\\d+"
 
-	list(mucen=mucen,locen=locen,stret=stret,nlginc=nlginc)
+	id = grep("PROFIL VERTICAL DE DRAG MESO",nd)
+	ind = seq(id+2,id+1+nflevg)
+	m = matrix(numlines(nd[ind]),nr=6)
+	gwd = as.data.frame(t(m))
+	names(gwd) = c("u","uday","t","tday","q","qday")
+
+	gwd
+}
+
+varqc = function(nd)
+{
+	indo = grep("^ *VAR *= *\\d+",nd)
+	iv = as.integer(sub("VAR *= *(\\d+).+","\\1",nd[indo]))
+	qc = vector(length(unique(iv)),mode="list")
+	for (i in iv) {
+		ind = which(iv == i)
+		notvar = intlines(sub(".+ NOTVAR *=","",nd[indo[ind[1]]]))
+		v = numlines(gsub("\\*+","-9999.",nd[indo[ind[-1]]]))
+		v[v==-9999] = NA
+		qc[[i]] = matrix(c(v,notvar),nc=length(ind))
+	}
+
+	qc
+}
+
+jotable = function(nd)
+{
+	iobst = grep("Obstype +\\d+ +=+",nd,ignore.case=TRUE)
+	ijog = grep("Jo Global",nd)
+	ndo = nd[iobst[1]:ijog[1]]
+	#ijoh = grep("Jo_Costfunction",ndo)
+	ijoh = grep("Codetype +\\d+ +=+",ndo)
+	njo = length(ijoh)
+	ijot = grep("^ +\\w+ +\\d+( +\\d+\\.\\d+){3}",ndo)
+	lj = strsplit(ndo[ijot],split=" +")
+	jot = t(sapply(lj,function(x) as.numeric(x[3:6])))
+	jot = as.data.frame(jot)
+	jot = cbind(sapply(lj,"[",2),jot)
+
+	names(jot) = c("Variable","DataCount","Jo_Costfunction","Jo/n","ObsErr")
+	code = integer(dim(jot)[[1]])
+
+	ijoh = c(ijoh,ijog[1])
+	for (i in seq(njo)) {
+		indi = ijot > ijoh[i] & ijot < ijoh[i+1]
+		code[indi] = sub(" +Codetype +(\\d+) +.+","\\1",ndo[ijoh[i]])
+	}
+
+	code = as.integer(code)
+	jot = cbind(Codetype=code,jot)
+
+	jot
 }
 
 procmap = function(nd)
@@ -391,8 +462,6 @@ plotmap = function(sta,onl)
 runtime = function(nd)
 {
    indw = grep("STEP +\\d+ +H=.+\\+CPU=",nd)
-	if (length(indw) == 0) return(NULL)
-
    walls = as.difftime(gsub("^ *([[:digit:]:]+) .+","\\1",nd[indw]),units="secs")
    cpus = as.difftime(as.numeric(gsub(".+\\+CPU= *","",nd[indw])),units="secs")
 
@@ -528,23 +597,6 @@ if (is.null(nlong)) {
 }
 
 nflevg = getvar("NFLEVG",nd)
-ab = abh(nd,nflevg)
-eta = ab$alpha+ab$Bh
-
-cat("Write geometry namelist for FPOS jobs\n")
-con = file(sprintf("%s/fp.txt",cargs$png),"w")
-cat("&NAMFPD\nNLAT =",ndglg,"\nNLON =",ndlon,"\n/\n",file=con)
-cat("&NAMFPG\n",file=con)
-dumpGem(con,gem,nsmax,nsttyp,nhtyp)
-dumpLon(con,nlong,ndgnh)
-dumpAB(con,ab)
-cat("/\n",file=con)
-close(con)
-
-nfp = readLines(sprintf("%s/fp.txt",cargs$png))
-ind = grep("[&*/\\] *nam\\w+",nfp,invert=TRUE,ignore.case=TRUE)
-nfp[ind] = sub("([.0-9]) *$","\\1,",nfp[ind])
-writeLines(nfp,sprintf("%s/fp.txt",cargs$png))
 
 cat("Standard atmosphere\n")
 std = stdatm(nd,nflevg)
@@ -573,17 +625,10 @@ if (dim(std)[2] == 1) {
 
 pngoff(op)
 
-cat("Vertical coordinate (1)\n")
-pngalt(sprintf("%s/eta.png",cargs$png))
-tt = c("Vertical hybrid coordinate",
-	sprintf("%d levels - tropopause: ~%d-%d",nflevg,itropt,itropo))
-matplot(cbind(ab[c("Bh","alpha")],eta=eta),type="o",lty=1,pch="|",main=tt,
-	xlab="Level",ylab=expression(eta))
-legend("topleft",c("Bh","Ah/Pref",expression(eta)),lty=1,pch="|",col=1:3,inset=.01)
-abline(h=0,col="darkgrey")
-pngoff()
+ab = abh(nd,nflevg)
+eta = ab$alpha+ab$Bh
 
-cat("Vertical coordinate (2)\n")
+cat("Vertical coordinate (1)\n")
 pngalt(sprintf("%s/levels.png",cargs$png))
 op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 ss = "Layer interfaces"
@@ -599,6 +644,46 @@ plot(ab$Ah,0:nflevg,type="o",lty=1,pch="-",main=c("Coefficient A/Pref",ss),
 abline(h=c(itropt,itropo),lty=2)
 pngoff(op)
 
+cat("Vertical coordinate (2)\n")
+pngalt(sprintf("%s/eta.png",cargs$png))
+tt = c("Vertical hybrid coordinate",
+	sprintf("%d levels - tropopause: ~%d-%d",nflevg,itropt,itropo))
+matplot(cbind(ab[c("Bh","alpha")],eta=eta),type="o",lty=1,pch="|",main=tt,
+	xlab="Level",ylab=expression(eta))
+legend("topleft",c("Bh","Ah/Pref",expression(eta)),lty=1,pch="|",col=1:3,inset=.01)
+abline(h=0,col="darkgrey")
+pngoff()
+
+cat("Write geometry namelist for FPOS jobs\n")
+con = file(sprintf("%s/fp.txt",cargs$png),"w")
+cat("&NAMFPD\nNLAT =",ndglg,"\nNLON =",ndlon,"\n/\n",file=con)
+cat("&NAMFPG\n",file=con)
+dumpGem(con,gem,nsmax,nsttyp,nhtyp)
+dumpLon(con,nlong,ndgnh)
+dumpAB(con,ab)
+cat("/\n",file=con)
+close(con)
+
+nfp = readLines(sprintf("%s/fp.txt",cargs$png))
+ind = grep("[&*/\\] *nam\\w+",nfp,invert=TRUE,ignore.case=TRUE)
+nfp[ind] = sub("([.0-9]) *$","\\1,",nfp[ind])
+writeLines(nfp,sprintf("%s/fp.txt",cargs$png))
+nfplev = getvar("NFPLEV",nd)
+if (length(nfplev) == 1) {
+	cat("FP levels:",nfplev,"\n")
+	abfp = abhfp(nd,nfplev)
+	pngalt(sprintf("%s/fplevels.png",cargs$png))
+	op = par(mfrow=c(1,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	ss = "Layer interfaces"
+	ylim = c(nfplev,0)
+	plot(abfp$Ah,0:nfplev,type="o",lty=1,pch="-",main=c("Coefficient A",ss),
+		xlab="Coef A",ylab="Level",ylim=ylim,cex=1.5,yaxs="i")
+	plot(abfp$Bh,0:nfplev,type="o",lty=1,pch="-",main=c("Coefficient B",ss),
+		xlab="Coef B",ylab="Level",ylim=ylim,cex=1.5,yaxs="i")
+	pngoff(op)
+}
+
+cat("Vertical scheme\n")
 rinte = vfe(nd,nflevg,"RINTE")
 pngalt(sprintf("%s/vfeint.png",cargs$png))
 if (is.null(rinte)) {
@@ -688,7 +773,7 @@ if (is.null(cor)) {
 }
 pngoff(op)
 
-cat("Spectral and vertical partitionning\n")
+cat("Spectral and vertical dimensions\n")
 nprtrw = getvar("NPRTRW",nd)
 if (length(nprtrw) == 0) {
 	nprtrw = getvar(".*\\<NPRTRW",nd)
@@ -705,12 +790,12 @@ if (length(nprtrw) == 0) {
 	nprtrv = getvar("NPRTRV",nd)
 }
 
-sp = try(spec(nd))
-nmeng = try(wavend(nd,ndglg))
-ndglu = try(specnb(nd))
-#nmen = wavenb(nd)
+cat("Spectral partitionning\n")
+if (getvar("NPRINTLEV",nd) > 0) {
+	nmeng = try(wavend(nd,ndglg))
+	ndglu = try(specnb(nd))
+	#nmen = wavenb(nd)
 
-if (! is(ndglu,"try-error") && ! is(nmeng,"try-error")) {
 	nm = length(ndglu)-1
 
 	pngalt(sprintf("%s/specgp.png",cargs$png))
@@ -726,7 +811,9 @@ if (! is(ndglu,"try-error") && ! is(nmeng,"try-error")) {
 	pngoff(op)
 }
 
-if (! is(sp,"try-error")) {
+cat("Spectral partitionning, part 2\n")
+if (getvar("NPRINTLEV",nd) > 0) {
+	sp = specdis(nd)
 	pngalt(sprintf("%s/specproc.png",cargs$png))
 	op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	pr = unlist(lapply(seq(along=sp$numpp),function(i) rep(i,each=sp$numpp[i])))
@@ -763,7 +850,6 @@ if (! is(sp,"try-error")) {
 
 cat("Vertical cubic weights (SL)\n")
 vintw = cuico(nd,nflevg)
-gamma = weno(nd,nflevg)
 
 pngalt(sprintf("%s/vintw.png",cargs$png))
 if (all(is.na(vintw))) {
@@ -787,6 +873,8 @@ if (all(is.na(vintw))) {
 }
 pngoff(op)
 
+cat("Vertical WENO coefficients\n")
+gamma = weno(nd,nflevg)
 pngalt(sprintf("%s/weno.png",cargs$png))
 if (is.null(gamma)) {
 	plot(1,xaxt="n",yaxt="n",xlab="",ylab="",pch="")
@@ -853,11 +941,60 @@ if (any(regexpr("LSLAG *= *T(RUE)?",nd) > 0)) {
 	cat("SL comms for MPI task",sub(" *MYPROC += +(\\d+).*","\\1",nd[ip[1]]),":",icomm,"\n")
 }
 
+cat("Vertical mesoscale drag\n")
+gwd = mesodrag(nd,nflevg)
+pngalt(sprintf("%s/mesodrag.png",cargs$png))
+op = par(mfrow=c(1,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+ylim = c(nflevg,1)
+plot(gwd$u,1:nflevg,type="o",lty=1,pch="-",main="Mesoscale drag",
+	xlab="Wind speed",ylab="Level",ylim=ylim,cex=1.5)
+abline(v=0,col="grey")
+plot(gwd$t,1:nflevg,type="o",lty=1,pch="-",main="Mesoscale drag",
+	xlab="Temperature",ylab="Level",ylim=ylim,cex=1.5)
+abline(v=0,col="grey")
+pngoff()
+
+cat("Values of Var QC\n")
+if (! is.null(cargs$varqc) && length(grep("OBSERVATION TYPE:",nd)) > 0) {
+	qc = varqc(nd)
+	qc1 = qc[[1]]
+	types = seq(dim(qc1)[1])
+	pngalt(sprintf("%s/varqc.png",cargs$png))
+	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	barplot(qc1[,1],names.arg=types,main="",xlab="Obs type",ylab="RAQC")
+	barplot(qc1[,2],names.arg=types,main="",xlab="Obs type",ylab="RLQC")
+	#barplot(t(qc1[,3:5]),names.arg=types,beside=TRUE,main="",xlab="Obs type",ylab="RBGQC(1:3)")
+	matplot(qc1[,3:5],main="",xlab="Obs type",ylab="RBGQC(1:3)",type="o",lty=1,col=1:3,pch=20)
+	barplot(qc1[,6],names.arg=types,main="",xlab="Obs type",ylab="NOTVAR")
+	pngoff()
+}
+
+cat("Jo tables\n")
+if (length(grep("JOT-sname",nd)) > 0) {
+	jot = jotable(nd)
+
+	jog = by(jot[-(1:2)],jot$Codetype,colMeans)
+	jod = jog[[1]]
+	for (jo in jog[-1]) jod = rbind(jod,jo,deparse.level=0)
+	jod = cbind(data.frame(Codetype=dimnames(jog)[[1]]),jod)
+
+	cat("Means of Jo by codetype:\n")
+	print(jod)
+
+	jog = by(jot[-(1:2)],jot$Variable,colMeans)
+	jod = jog[[1]]
+	for (jo in jog[-1]) jod = rbind(jod,jo,deparse.level=0)
+	jod = cbind(data.frame(Variable=dimnames(jog)[[1]]),jod)
+
+	cat("Means of Jo by variable:\n")
+	print(jod)
+}
+
 cat("Run-time information\n")
 nstop = getvar("NSTOP",nd)
 tstep = getvar("TSTEP",nd)
-tt = runtime(nd)
-if (! is.null(tt)) {
+if (length(grep("STEP +\\d+ +H=.+\\+CPU=",nd)) > 0) {
+	tt = runtime(nd)
 	nts = dim(tt)[1]
 
 	t0 = round(as.numeric(tt$wall[1]-attr(tt,"start"),units="secs") %% 86400,3)
