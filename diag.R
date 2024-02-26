@@ -716,7 +716,7 @@ dilat = function(frame)
 
 		dlon = abs(diff(frame$long[ip[1:2]]))
 		a = cos(frame$lat[ip[1]]*pi/180)
-		stopifnot(abs(diff(frame$lat[ip[1:2]])) < abs(diff(frame$lat[ip[3:4]])))
+		if (frame$gem[2] < 1) stopifnot(abs(diff(frame$lat[ip[1:2]])) < abs(diff(frame$lat[ip[3:4]])))
 
 		ddm[i] = sqrt(diff(frame$lat[ip[1:2]])^2+(a*pmin(dlon,360-dlon))^2)
 	}
@@ -736,6 +736,122 @@ lat45 = function(data,frame)
 	i = frame$nlat%/%4
 	ip = clats[i]+seq(frame$nlong[i])
 	data[ip,,drop=FALSE]
+}
+
+ddiffn = function(x,y,n,yprev)
+{
+	if (n == 0) {
+		return(y)
+	} else if (n == 1) {
+		return(diff(y[1:2])/diff(x[1:2]))
+	}
+
+	if (missing(yprev)) {
+		yx1 = ddiffn(x[-(n+1)],y[-(n+1)],n-1)
+	} else {
+		yx1 = yprev
+	}
+
+	yx2 = ddiffn(x[-1],y[-1],n-1)
+	(yx2-yx1)/(x[n+1]-x[1])
+}
+
+udiffn = function(y,n,yprev)
+{
+	if (n == 0) {
+		return(y)
+	} else if (n == 1) {
+		return(diff(y[1:2]))
+	}
+
+	if (missing(yprev)) {
+		yx1 = udiffn(y[-(n+1)],n-1)
+	} else {
+		yx1 = yprev
+	}
+
+	yx2 = udiffn(y[-1],n-1)
+	(yx2-yx1)/n
+}
+
+Pn = function(x,y,n,xh)
+{
+	yprev = y
+	for (i in (1:n)+1) yprev[i] = ddiffn(x[1:i],y[1:i],i-1,yprev[i-1])
+
+	yprev = yprev[-1]
+	if (missing(xh)) return(yprev)
+
+	y[1]+sum(sapply(1:n,function(i) yprev[i]*prod(xh-x[1:i])))
+}
+
+uPn = function(y,n,h)
+{
+	yprev = y
+	for (i in (1:n)+1) yprev[i] = udiffn(y[1:i],i-1,yprev[i-1])
+
+	yprev = yprev[-1]
+	if (missing(h)) return(yprev)
+
+	y[1]+sum(sapply(1:n,function(i) yprev[i]*prod(h-(1:i))))
+}
+
+dprodf = function(x,xh)
+{
+	if (length(x) == 1) return(1)
+
+	sum(sapply(seq(along=x),function(j) prod(xh-x[-j])))
+}
+
+dPn = function(x,y,n,xh)
+{
+	newt = Pn(x,y,n)
+	sum(sapply(1:n,function(i) newt[i]*dprodf(x[1:i],xh)))
+}
+
+duPn = function(y,n,h)
+{
+	newt = Pn(y,n)
+	sum(sapply(1:n,function(i) newt[i]*dprodf(1:i,h)))
+}
+
+gradl = function(data,frame,method="newton")
+{
+	stopifnot(frame$gauss)
+	stopifnot(method %in% c("newton","FD"))
+
+	clats = c(0,cumsum(frame$nlong))
+
+	datal = data
+
+	for (i in seq(frame$nlat)) {
+		ip = clats[i]+seq(frame$nlong[i])
+		np = length(ip)
+
+		ip1 = c(ip[np],ip[-np])
+		ip3 = c(ip[-1],ip[1])
+		ip0 = c(ip[np-1:0],ip[0:1-np])
+		ip4 = c(ip[-(1:2)],ip[1:2])
+
+		if (method == "newton") {
+			m = t(matrix(c(ip0,ip1,ip,ip3,ip4),ncol=5))
+
+			for (j in seq(dim(data)[2])) {
+				a = mclapply(seq(dim(m)[2]),function(k) dPn(1:5,data[m[,k],j],4,3),mc.cores=8)
+				datal[ip,j] = simplify2array(a)
+			}
+		} else {
+			dlon = abs(diff(frame$long[ip[1:2]]))
+			a = cos(frame$lat[ip[1]]*pi/180)
+			dl = sqrt(diff(frame$lat[ip[1:2]])^2+(a*pmin(dlon,360-dlon))^2)
+			d3 = (data[ip3,]-data[ip1,])/(2*dl)
+			d5 = (data[ip3,]-data[ip1,])/(4*dl)
+			datal[ip,] = 2*d3-d5
+		}
+		if (i%%10 == 0) cat(". lat",i,"\n")
+	}
+
+	datal
 }
 
 vgrad = function(data,frame)
@@ -1152,7 +1268,9 @@ mapdom = function(dom,points,data,main=NULL,mar=par("mar"),breaks="Sturges",
 	h = prettyBreaks(data,breaks,crop=TRUE)
 	b = cut(data,h$breaks)
 
-	if (length(data) > npmax) {
+	if (length(data) < npmax/100) {
+		cex = 2*cex
+	} else if (length(data) > npmax) {
 		if (length(data) > 2*npmax) {
 			ind = seq(1,length(data),as.integer(length(data)/npmax))
 			npmax = length(ind)
@@ -1225,7 +1343,7 @@ mapsegments = function(dom,lat,long,...)
 }
 
 mapdom2 = function(dom,points,zx,zy,main=NULL,mar=par("mar"),breaks="Sturges",
-	colvec=TRUE,length=.05,angle=15,ppi=8,quiet=FALSE,...)
+	colvec=TRUE,length=.05,angle=15,ppi=6,quiet=FALSE,...)
 {
 	l = mapxy(dom,mar=mar,new=TRUE)
 
@@ -1293,7 +1411,7 @@ mapdom2 = function(dom,points,zx,zy,main=NULL,mar=par("mar"),breaks="Sturges",
 
 	ffi = sqrt((fx/ux*f[1])^2+(fy/uy*f[2])^2)
 
-	ind = ffi > 1.e-3
+	ind = ffi > 2.e-3
 
 	if (dom$proj == "-") {
 		arrows(x,y,x2,y2,length,angle,col=cols[ind],...)
@@ -1419,6 +1537,7 @@ plotv = function(x,y,z,ylim=rev(range(y,finite=TRUE)),xaxs="i",yaxs="i",palette=
 	br = prettyBreaks(z,crop=TRUE)$breaks
 	dbr = diff(range(br))*.Machine$double.eps
 	stopifnot(all(min(br)-dbr <= z & z <= max(br)+dbr))
+	if (length(br) == 2) br = c(br,br[2]+diff(br))
 	rev = regexpr("\\+$",palette) < 0
 	cols = hcl.colors(length(br)-1,sub("\\+$","",palette),rev=rev)
 	if (long) {
@@ -2564,7 +2683,7 @@ if (FALSE) {
 		}
 	}
 
-	cat("Compute mean bias and RMSE and graphics\n")
+	cat("Compute statistics (mean bias, RMSE and max error) and graphics\n")
 	descb = desc
 	descb$palette = "Blue-Red+"
 
@@ -2572,6 +2691,7 @@ if (FALSE) {
 		cat(". param",desc$symbol[j],"\n")
 
 		for (i in seq(along=dff$file)) {
+			cat(". mean bias\n")
 			# efficient mean
 			bias = lerr[[j]][,,1,i]
 			for (id in seq(along=dates)[-1]) bias = bias+lerr[[j]][,,id,i]
@@ -2579,11 +2699,26 @@ if (FALSE) {
 			dim(bias) = dim(lerr[[j]])[1:2]
 			invisible(mapexi(bias,frlow,frmap,descb[j,],doms,prefix=sprintf("bias%d",i)))
 
+			cat(". RMSE\n")
 			rmse = lerr[[j]][,,1,i]^2
 			for (id in seq(along=dates)[-1]) rmse = rmse+lerr[[j]][,,id,i]^2
 			rmse = sqrt(rmse/length(dates))
 			dim(rmse) = dim(lerr[[j]])[1:2]
 			invisible(mapexi(rmse,frlow,frmap,desc[j,],doms,prefix=sprintf("rmse%d",i)))
+
+			cat(". maximum error\n")
+			errx = abs(lerr[[j]][,,1,i])
+			dim(errx) = dim(lerr[[j]])[1:2]
+			for (id in seq(along=dates)[-1]) errx = pmax(errx,abs(lerr[[j]][,,id,i]))
+			invisible(mapexi(errx,frlow,frmap,desc[j,],doms,prefix=sprintf("errx%d",i)))
+
+			#cat(". index of maximum error\n")
+			#jmax = errx
+			#for (ip in seq(prod(dim(errx)))) {
+				#err = lerr[[j]][,,1,i]
+				#jmax[ip] = sapply(lerr,function(j) which.min(abs(errx[ip]-err[ip])))
+			#}
+			#invisible(mapexi(errx,frlow,frmap,desc[j,],doms,prefix=sprintf("errx%d",i)))
 		}
 	}
 }

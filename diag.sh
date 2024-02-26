@@ -166,7 +166,7 @@ do
 
 		for dom in $doms
 		do
-			echo "<tr><th name='title' $att>Param '$par' - ${tt[*]} - Domain $dom</th><tr>"
+			echo "<tr><th name='title' $att>Param '$par' - ${tt[*]} - Domain $dom</th></tr>"
 			echo "<tr>"
 
 			for typ in map hist mapdiff histdiff
@@ -181,29 +181,21 @@ do
 
 			cat $diags/step.html
 
-			echo "<tr><th colspan='2'>Param '$par' bias - Domain $dom</th><tr>"
-			echo "<tr>"
-
-			for typ in mapbias histbias
+			for stat in bias rmse errx
 			do
-				fic=$loc/$typ$it${dom}_$par.png
-				[ -s $fic ] || continue
+				echo "<tr><th colspan='2'>Param '$par' $stat - Domain $dom</th></tr>"
+				echo "<tr>"
 
-				printf "\t<td><img name='fig' src='%s' alt='missing image'/></td>\n" $fic
+				for typ in map$stat hist$stat
+				do
+					fic=$loc/$typ$it${dom}_$par.png
+					[ -s $fic ] || continue
+
+					printf "\t<td><img name='fig' src='%s' alt='missing image'/></td>\n" $fic
+				done
+
+				echo "</tr>"
 			done
-
-			echo "<tr><th colspan='2'>Param '$par' RMSE - Domain $dom</th><tr>"
-			echo "<tr>"
-
-			for typ in maprmse histrmse
-			do
-				fic=$loc/$typ$it${dom}_$par.png
-				[ -s $fic ] || continue
-
-				printf "\t<td><img name='fig' src='%s' alt='missing image'/></td>\n" $fic
-			done
-
-			echo "</tr>"
 		done > $loc/idom.html
 
 		if grep -qE '<img .+ src=' $loc/idom.html
@@ -219,12 +211,15 @@ do
 	sed -re 's:TAG NAME:step:' -e "/TAG OPT/r $loc/steps.html" $diags/select.html
 	for dom in $doms
 	do
-		for typ in map hist mapdiff histdiff mapbias histbias maprmse histrmse
+		for stat in "" diff bias rmse errx
 		do
-			fic=$loc/$typ${dom}_$par.html
-			[ -s $fic ] || continue
+			for typ in map$stat hist$stat
+			do
+				fic=$loc/$typ${dom}_$par.html
+				[ -s $fic ] || continue
 
-			sed -re 's:TAG NAME:map:' -e "/TAG OPT/r $fic" $diags/select.html
+				sed -re 's:TAG NAME:map:' -e "/TAG OPT/r $fic" $diags/select.html
+			done
 		done
 	done
 

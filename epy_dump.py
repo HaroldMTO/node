@@ -77,6 +77,8 @@ if a.format != "GRIB":
 			locen = grid["pole_lon"].get("degrees")
 			mucen = grid["pole_lat"].get()[1]
 			gem = (grid["dilatation_coef"],mucen,locen)
+		else:
+			gem = (1.,1.,0.)
 
 	lonlat = geom.get_lonlat_grid()
 	longs = lonlat[0]
