@@ -98,8 +98,9 @@ numlines = function(nd)
 specdis = function(nd)
 {
 	i1 = grep("^ *NUMPP\\>",nd)
-	i2 = grep("MAXIMUM NUMBER OF THREADS",nd)
-	ind = seq(i1+1,i2-1)
+	i2 = grep("(MAXIMUM )?NUMBER OF THREADS",nd)
+	i2 = i2[i2 > i1]
+	ind = seq(i1+1,i2[1]-1)
 	numpp = intlines(nd[ind])
 
 	i1 = grep("^ *NPROCM",nd)
@@ -208,7 +209,8 @@ silev = function(nd,nflevg)
 		ire = regexec(sprintf(" *\\d+ +SITLAF *= +(%s) +SIDPHI *= +(%s)",Gnum,Gnum),nd[il])
 	} else {
 		il = grep("Level +SITLAF +SIDPHI",nd)
-		stopifnot(length(il) == 1)
+		if (length(il) == 0) return(NULL)
+
 		il = seq(il+1,il+nflevg)
 		ire = regexec(sprintf(" *\\d+ +(%s) +(%s)",Gnum,Gnum),nd[il])
 	}
@@ -225,22 +227,26 @@ silev = function(nd,nflevg)
 		sivp = rep(0,nflevg)
 	}
 
+	data.frame(sivp=sivp,sitlaf=sitlaf,sidphi=sidphi)
+}
+
+sihd = function(nd,nflevg)
+{
 	i1 = grep("\\<PDILEV",nd)
+	if (length(i1) == 0) return(NULL)
+
 	if (length(i1) == 1) {
 		i2 = grep("SUE?HDVPN",nd)[1]
 		il = seq(i1+1,i2-1)
 		pdi = numlines(nd[il])
 		pdis = rep(0,nflevg)
-	} else if (length(i1) > 1) {
+	} else {
 		il = seq(i1[1]+1,i1[2]-1)
 		pdi = numlines(nd[il])
 		i1 = grep("PDILEVS\\>",nd)
 		i2 = grep("SUE?HDVPN",nd)[1]
 		il = seq(i1+1,i2-1)
 		pdis = numlines(nd[il])
-	} else {
-		pdi = rep(0,nflevg)
-		pdis = rep(0,nflevg)
 	}
 
 	i1 = grep("KNSHD *:",nd)
@@ -248,11 +254,9 @@ silev = function(nd,nflevg)
 	if (length(i1) == 1 && length(i2) == 1) {
 		il = seq(i1+1,i2-1)
 		knshd = intlines(nd[il])
-	} else {
-		knshd = rep(0,nflevg)
 	}
 
-	data.frame(sivp=sivp,sitlaf=sitlaf,sidphi=sidphi,pdi=pdi,pdis=pdis,knshd=knshd)
+	data.frame(pdi=pdi,pdis=pdis,knshd=knshd)
 }
 
 sicor = function(nd,nflevg)
@@ -339,6 +343,15 @@ varqc = function(nd)
 	}
 
 	qc
+}
+
+jcdfi = function(nd,nflevg)
+{
+	idfi = grep("Jc-DFI Diagnostic Table",nd)
+	if (length(idfi) != 2) return(NULL)
+
+	jc = t(matrix(numlines(nd[seq(idfi[1]+1,idfi[2]-2)]),ncol=nflevg))
+	jc
 }
 
 jotable = function(nd)
@@ -605,8 +618,8 @@ ttstd = "Standard atmosphere"
 if (dim(std)[2] == 1) {
 	itropo = itropt = NA_integer_
 	op = par(mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-	plot(seq(nflevg),std$Z,type="o",lty=1,pch="-",main=c(ttstd,"Height of level"),
-		xlab="Level",ylab="Height above MSL (m)")
+	plot(seq(nflevg),std$Z/1000,type="o",lty=1,pch="-",main=c(ttstd,"Height of level"),
+		xlab="Level",ylab="Height above MSL (km)")
 } else {
 	itropo = getvar("SUSTA: CLOSEST FULL LEVEL",nd,":")
 	itropt = which(std$T == std$T[itropo-1])[1]
@@ -726,39 +739,53 @@ if (is.null(rderi)) {
 }
 pngoff(op)
 
-cat("Vertical SI system and spectral horizontal diffusion\n")
+cat("Vertical SI system\n")
 si = silev(nd,nflevg)
-
 pngalt(sprintf("%s/sipre.png",cargs$png))
-op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-ylim = c(nflevg,1)
-plot(si$sivp,1:nflevg,type="o",lty=1,pch="-",main="SIVP: vert. modes (= freq.)",
-	xlab="Mode",ylab="Level",ylim=ylim,cex=1.5)
-if (all(si$sivp == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
-plot(si$sitlaf/100,1:nflevg,type="o",lty=1,pch="-",main="SITLAF: d(ln(P))/ln(P)",
-	xlab="Pressure (hPa)",ylab="Level",ylim=ylim,cex=1.5)
-plot(si$sidphi,1:nflevg,type="o",lty=1,pch="-",main="SIDPHI: diff. of geopotential",
-	xlab="Geopotential",ylab="Level",ylim=ylim,cex=1.5)
-pngoff(op)
+if (is.null(si)) {
+	plot(1,xlab="",ylab="",col=0,xaxt="n",yaxt="n")
+	text(1,1,"no info on SI system")
+	pngoff()
+} else {
+	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	ylim = c(nflevg,1)
+	plot(si$sivp,1:nflevg,type="o",lty=1,pch="-",main="SIVP: vert. modes (= freq.)",
+		xlab="Mode",ylab="Level",ylim=ylim,cex=1.5)
+	if (all(si$sivp == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
+	plot(si$sitlaf/100,1:nflevg,type="o",lty=1,pch="-",main="SITLAF: d(ln(P))/ln(P)",
+		xlab="Pressure (hPa)",ylab="Level",ylim=ylim,cex=1.5)
+	plot(si$sidphi,1:nflevg,type="o",lty=1,pch="-",main="SIDPHI: diff. of geopotential",
+		xlab="Geopotential",ylab="Level",ylim=ylim,cex=1.5)
+	pngoff(op)
+}
 
+cat("Spectral horizontal diffusion\n")
+hd = sihd(nd,nflevg)
 pngalt(sprintf("%s/sihd.png",cargs$png))
-op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-plot(si$pdi/100,1:nflevg,type="l",lty=1,main="PDILEV: 1+7.5*(3-log10(P))",
-	xlab="PDILEV (hPa)",ylab="Level",ylim=ylim,cex=1.5)
-if (all(si$pdi == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
-plot(si$pdis/100,1:nflevg,type="l",lty=1,main="PDILEVS: cf PDILEV)",
-	xlab="PDILEVS (hPa)",ylab="Level",ylim=ylim,cex=1.5)
-plot(si$knshd,1:nflevg,type="l",lty=1,main="KNSHD",xlab="KNSHD",ylab="Level",ylim=ylim,
-	cex=1.5)
-if (all(si$knshd == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
-pngoff(op)
+if (is.null(hd)) {
+	plot(1,xlab="",ylab="",col=0,xaxt="n",yaxt="n")
+	text(1,1,"no info on SI system")
+	pngoff()
+} else {
+	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	plot(hd$pdi/100,1:nflevg,type="l",lty=1,main="PDILEV: 1+7.5*(3-log10(P))",
+		xlab="PDILEV (hPa)",ylab="Level",ylim=ylim,cex=1.5)
+	if (all(hd$pdi == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
+	plot(hd$pdis/100,1:nflevg,type="l",lty=1,main="PDILEVS: cf PDILEV)",
+		xlab="PDILEVS (hPa)",ylab="Level",ylim=ylim,cex=1.5)
+	plot(hd$knshd,1:nflevg,type="l",lty=1,main="KNSHD",xlab="KNSHD",ylab="Level",ylim=ylim,
+		cex=1.5)
+	if (all(hd$knshd == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
+	pngoff(op)
+}
 
+cat("Spectral SI correction\n")
 cor = sicor(nd,nflevg)
 pngalt(sprintf("%s/sicor.png",cargs$png))
 if (is.null(cor)) {
-	op = par(xaxt="n",yaxt="n")
-	plot(1,xlab="",ylab="",col=0)
+	plot(1,xlab="",ylab="",col=0,xaxt="n",yaxt="n")
 	text(1,1,"no CORDI")
+	pngoff()
 } else {
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	plot(cor$rcordit,1:nflevg,type="l",lty=1,main="RCORDIT (tropo)",xlab="RCORDIT",
@@ -770,8 +797,8 @@ if (is.null(cor)) {
 	plot(cor$rcordif,1:nflevg,type="l",lty=1,main="RCORDIF",xlab="RCORDIF",ylab="Level",
 		ylim=ylim,cex=1.5)
 	if (all(cor$rcordif == 0)) text(0,nflevg/2,"not decoded",.5,col=2)
+	pngoff(op)
 }
-pngoff(op)
 
 cat("Spectral and vertical dimensions\n")
 nprtrw = getvar("NPRTRW",nd)
@@ -853,8 +880,9 @@ vintw = cuico(nd,nflevg)
 
 pngalt(sprintf("%s/vintw.png",cargs$png))
 if (all(is.na(vintw))) {
-	plot(1,xaxt="n",yaxt="n",xlab="",ylab="",pch="")
+	plot(1,xaxt="n",yaxt="n",xlab="",ylab="",col=0)
 	text(1,1,"no vertical cubic weights (VINTW)")
+	pngoff()
 } else {
 	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	nl3 = nflevg-3
@@ -870,15 +898,16 @@ if (all(is.na(vintw))) {
 		main="Weight at mid levels",xlab="abs(Weight)",ylab="Level",ylim=c(nmid,ntop))
 	matplot(abs(vintw[nmid:nl3,2:4]),nmid:nl3,type="o",lty=1,pch="-",
 		main="Weight at bottom",xlab="abs(Weight)",ylab="Level",ylim=c(nl3,nmid))
+	pngoff(op)
 }
-pngoff(op)
 
 cat("Vertical WENO coefficients\n")
 gamma = weno(nd,nflevg)
 pngalt(sprintf("%s/weno.png",cargs$png))
 if (is.null(gamma)) {
-	plot(1,xaxt="n",yaxt="n",xlab="",ylab="",pch="")
+	plot(1,xaxt="n",yaxt="n",xlab="",ylab="",col=0)
 	text(1,1,"no gamma weights (WENO)")
+	pngoff()
 } else {
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 
@@ -886,8 +915,8 @@ if (is.null(gamma)) {
 		tt = sprintf("WENO weights %d",i)
 		plot(gamma[,i],2:nl3,type="o",lty=1,pch="-",main=tt,xlab="Gamma",ylab="Level",ylim=c(nl3,2))
 	}
+	pngoff(op)
 }
-pngoff(op)
 
 if (length(unique(nlong)) == 1) {
 	cat("--> regular Gaussian grid\n")
@@ -924,21 +953,22 @@ if (length(s) == 0) {
 }
 pngoff()
 
+cat("SL scheme information\n")
 if (any(regexpr("LSLAG *= *T(RUE)?",nd) > 0)) {
 	ngp = min(ngptot)
-	cat("SL scheme information\n")
 	naslb1 = getvar("\\w.+ YDSL%NASLB1",nd)
 	nslrpt = getvar("SLRSET: +NSLRPT",nd)
 	nslspt = getvar("SLRSET: +NSLSPT",nd)
 	islwide = getvar("ISLWIDE",nd)
-	cat("SL halo comms (send/recv):",nslspt,"/",nslrpt,"points\n")
-	cat("SL total size (naslb1):",naslb1,"points\n")
-	cat("SL halo width:",islwide,"lats and longs\n")
-	cat("Core ratio in SL:",round(ngp/naslb1,3)*100,"%\n")
 	isl = grep("NSLCOMM",nd,ignore.case=TRUE)
 	icomm = as.integer(strsplit(gsub("^ +","",nd[isl+1])," +")[[1]])
 	ip = grep("MYPROC",nd,ignore.case=TRUE)
-	cat("SL comms for MPI task",sub(" *MYPROC += +(\\d+).*","\\1",nd[ip[1]]),":",icomm,"\n")
+	cat("SL halo comms (send/recv):",nslspt,"/",nslrpt,"points
+SL total size (naslb1):",naslb1,"points
+SL halo width:",islwide,"lats and longs
+Core ratio in SL:",round(ngp/naslb1,3)*100,"%
+SL comms for MPI task",sub(" *MYPROC += +(\\d+).*","\\1",nd[ip[1]]),":",icomm,"\n",
+		file=sprintf("%s/out.txt",cargs$png))
 }
 
 cat("Vertical mesoscale drag\n")
@@ -954,8 +984,9 @@ plot(gwd$t,1:nflevg,type="o",lty=1,pch="-",main="Mesoscale drag",
 abline(v=0,col="grey")
 pngoff()
 
+if (FALSE) {
 cat("Values of Var QC\n")
-if (! is.null(cargs$varqc) && length(grep("OBSERVATION TYPE:",nd)) > 0) {
+if (length(grep("OBSERVATION TYPE:",nd)) > 0) {
 	qc = varqc(nd)
 	qc1 = qc[[1]]
 	types = seq(dim(qc1)[1])
@@ -963,10 +994,13 @@ if (! is.null(cargs$varqc) && length(grep("OBSERVATION TYPE:",nd)) > 0) {
 	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	barplot(qc1[,1],names.arg=types,main="",xlab="Obs type",ylab="RAQC")
 	barplot(qc1[,2],names.arg=types,main="",xlab="Obs type",ylab="RLQC")
+	nc = dim(qc1)[2]
 	#barplot(t(qc1[,3:5]),names.arg=types,beside=TRUE,main="",xlab="Obs type",ylab="RBGQC(1:3)")
-	matplot(qc1[,3:5],main="",xlab="Obs type",ylab="RBGQC(1:3)",type="o",lty=1,col=1:3,pch=20)
-	barplot(qc1[,6],names.arg=types,main="",xlab="Obs type",ylab="NOTVAR")
+	matplot(qc1[,3:(nc-1)],main="",xlab="Obs type",ylab="RBGQC(1:3)",type="o",lty=1,
+		pch=20)
+	barplot(qc1[,nc],names.arg=types,main="",xlab="Obs type",ylab="NOTVAR")
 	pngoff()
+}
 }
 
 cat("Jo tables\n")
@@ -978,16 +1012,62 @@ if (length(grep("JOT-sname",nd)) > 0) {
 	for (jo in jog[-1]) jod = rbind(jod,jo,deparse.level=0)
 	jod = cbind(data.frame(Codetype=dimnames(jog)[[1]]),jod)
 
-	cat("Means of Jo by codetype:\n")
-	print(jod)
+	con = file(sprintf("%s/jo.txt",cargs$png),open="w+")
+	cat("<pre>Means of Jo by codetype:\n",file=con)
+	jod[,-1] = signif(jod[,-1],5)
+	write.table(jod,file=con,quote=FALSE,row.names=FALSE,sep="\t\t")
 
 	jog = by(jot[-(1:2)],jot$Variable,colMeans)
 	jod = jog[[1]]
 	for (jo in jog[-1]) jod = rbind(jod,jo,deparse.level=0)
 	jod = cbind(data.frame(Variable=dimnames(jog)[[1]]),jod)
 
-	cat("Means of Jo by variable:\n")
-	print(jod)
+	cat("\nMeans of Jo by variable:\n",file=con)
+	jod[,-1] = signif(jod[,-1],5)
+	write.table(jod,file=con,quote=FALSE,row.names=FALSE,sep="\t\t")
+	cat("</pre>\n",file=con)
+	close(con)
+}
+
+cat("Jc DFI\n")
+jc = jcdfi(nd,nflevg)
+pngalt(sprintf("%s/jcdfi.png",cargs$png))
+if (is.null(jc)) {
+   plot(1,xaxt="n",yaxt="n",xlab="",ylab="",pch="")
+   text(1,1,"no Jc DFI")
+	pngoff()
+} else {
+	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	for (i in seq(dim(jc)[2])) {
+		plot(jc[,i],1:nflevg,type="l",ylab="Level",ylim=c(nflevg,1))
+	}
+	pngoff(op)
+}
+
+cat("Values of minimization\n")
+ind = grep("GREPCOST - ITER",nd)
+if (length(ind) > 0) {
+	jacob = t(matrix(numlines(nd[ind]),nrow=6))
+	jac = c("Jo","Jb","Jc","Jq","Jp","JcVarBC")
+	dimnames(jacob)[[2]] = jac
+	ritz = t(matrix(numlines(grep("ritz values",nd,value=TRUE)[-1]),nrow=2))
+	grad = numlines(grep("reduction in norm",nd,value=TRUE))
+
+	iter = seq(along=grad)-1
+	iterj = iter[c(seq(dim(jacob)[1]-1),length(iter))]
+	pngalt(sprintf("%s/jacob.png",cargs$png))
+	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	for (i in c(1:3,5)) {
+		plot(iterj,jacob[,i],type="o",main=jac[i],xlab="Iteration",ylab=jac[i],pch=20)
+	}
+	pngoff(op)
+
+	pngalt(sprintf("%s/grad.png",cargs$png))
+	op = par(mfrow=c(3,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	plot(ritz[,1],type="l",main="Ritz value 1",xlab="Iteration",ylab="Ritz 1")
+	plot(ritz[,2],type="l",main="Ritz value 2",xlab="Iteration",ylab="Ritz 2")
+	plot(iter,grad,type="l",main="Norm of gradient",xlab="Iteration",ylab="Gradient")
+	pngoff(op)
 }
 
 cat("Run-time information\n")
