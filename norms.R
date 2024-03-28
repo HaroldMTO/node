@@ -1,5 +1,6 @@
-Gnum = "-?\\d*\\.\\d+([eE]?[-+]?\\d+)?\\>"
-Gint = "-?\\d+\\>"
+library(mfnode)
+
+gpfre = sprintf("%s|DIV",gpfre)
 
 getarg = function(x,args)
 {
@@ -9,194 +10,19 @@ getarg = function(x,args)
 	strsplit(sub(sprintf("\\<%s=",x),"",args[ind]),split=":")[[1]]
 }
 
-getvar = function(var,nd,sep="=")
-{
-	re = sprintf("^ *\\<%s *%s *(%s|%s).*",var,sep,Gint,Gnum)
-	unique(as.numeric(gsub(re,"\\1",grep(re,nd,value=TRUE))))
-}
-
-line2num = function(nd)
-{
-	lre = regmatches(nd,gregexpr(sprintf("(%s|\\<NaN\\>)",Gnum),nd))
-	lre = lapply(lre,function(x) gsub("(\\d+)([-+]\\d+)","\\1E\\2",x))
-	sapply(lre,as.numeric)
-}
-
-gpnorm2D = function(nd)
-{
-	ind = grep("^ *NUMFLDS=",nd)
-	indo = grep("^ *GPNORM OUTPUT",nd)
-
-	nfg = as.integer(sub(" *NUMFLDS= *(\\d+) .+","\\1",nd[ind]))
-	ind = ind[nfg > 0]
-	nfg = nfg[nfg > 0]
-	surf = list()
-	group = character()
-
-	for (i in seq(along=ind)) {
-		group[i] = sub("^.+ (\\w+) +- +.+","\\1",nd[ind[i]-1])
-		gnames = sub("^ *\\w+( +\\d+)+ +(\\w+(\\.\\w+)?).+","\\2",nd[ind[i]+seq(nfg[i])])
-
-		ii = grep(sprintf("\\<%s\\>",group[i]),nd[indo-1])
-		if (length(ii) == 0) {
-			group[i] = sub("^ *(\\w+) +.+","\\1",nd[ind[i]+1])
-			ii = grep(sprintf("\\<%s\\>",group[i]),nd[indo-1])
-			if (length(ii) == 0) {
-				cat("--> no GP norms for group",group[i],i,"\n")
-				next
-			}
-		}
-
-		ii = ii[1]
-		if (regexpr(", +FIELD +\\d+",nd[indo[ii]-1]) > 0) {
-			# nfg lines AVE, every 4 lines (group, GPNORM, AVE, 1)
-			indi = indo[ii]+(seq(nfg[i])-1)*4+1
-		} else if (regexpr(" \\d+ +FIELDS\\>",nd[indo[ii]-1]) > 0) {
-			# nfg lines AVE, every 3 lines (GPNORM, AVE, 1)
-			indi = indo[ii]+(seq(nfg[i])-1)*3+1
-		} else {
-			# nfg lines after GPNORM and AVE
-			indi = indo[ii]+seq(nfg[i])+1
-		}
-
-		gpn = t(line2num(nd[indi]))
-		dimnames(gpn) = list(gnames,c("ave","min","max"))
-		surf[[i]] = gpn
-	}
-
-	surf[sapply(surf,length) > 0]
-}
-
-gpnorm = function(nd,lev,ind,noms)
-{
-	if (missing(ind)) {
-		ind = grep("GPNORM +\\w+.* +AVERAGE",nd)
-		indo = grep("GPNORM OUTPUT",nd[ind],invert=TRUE)
-		ind = ind[indo]
-	}
-
-	if (length(ind) == 0) stop("no GP norms")
-
-	if (missing(noms)) {
-		noms = unique(sub(" *GPNORM +(\\w+.+?) +AVERAGE.+","\\1",nd[ind]))
-	} else {
-		i = grep(sprintf(" *GPNORM +(%s)\\>",paste(noms,collapse="|")),nd[ind])
-		ind = ind[i]
-   }
-
-	indi = rep(ind,each=length(lev))+lev+1
-
-	gpn = line2num(nd[indi])
-
-	nt = length(gpn)/(3*length(lev)*length(noms))
-	if (nt > as.integer(nt)) {
-		nn = sapply(noms,function(x) length(grep(sprintf("\\<%s\\>",x),nd[ind])))
-		noms = noms[nn == max(nn)]
-		i = grep(sprintf(" *GPNORM +(%s)\\>",paste(noms,collapse="|")),nd[ind])
-		ind = ind[i]
-		indi = rep(ind,each=length(lev))+lev+1
-		gpn = line2num(nd[indi])
-		nt = length(gpn)/(3*length(lev)*length(noms))
-	}
-
-	stopifnot(nt == as.integer(nt))
-
-	noms = unique(sub(" *GPNORM +(\\w+.+?) +AVERAGE.+","\\1",nd[ind]))
-	noms[noms == "SURFACE PRESSURE"] = "SURF P"
-	noms[noms == "TEMPRATURE"] = "TEMP"
-	noms[noms == "U VELOCITY"] = "U VELOC."
-	noms[noms == "V VELOCITY"] = "V VELOC."
-
-	dim(gpn) = c(3,length(lev),length(noms),nt)
-	gpl = aperm(gpn,c(4,2,1,3))
-
-	dimnames(gpl) = list(NULL,lev,c("ave","min","max"),noms)
-
-	gpl
-}
-
-spnorm = function(nd,lev,ind)
-{
-	if (missing(ind)) {
-		ind = grep("SPECTRAL NORMS",nd)
-		inds = grep("NORMS AT NSTEP CNT4",nd[ind-1])
-		ind = ind[inds]
-	}
-
-	spsp = as.numeric(gsub("SPECTRAL NORMS.+ ([-0-9.E+]+|NaN)$","\\1",nd[ind]))
-
-	noms = strsplit(nd[ind[1]+1]," {2,}")[[1]][-1]
-	noms[noms == "KINETIC ENERGY"] = "TKE"
-
-	indi = rep(ind,each=length(lev))+lev+2
-
-	spn = line2num(nd[indi])
-
-	nt = length(spn)/(length(lev)*length(noms))
-	stopifnot(nt == as.integer(nt))
-
-	dim(spn) = c(length(noms),length(lev),nt)
-	spn = aperm(spn,c(3,2,1))
-
-	if (length(lev) == 1) {
-		spn = c(spn,spsp)
-		noms = c(noms,"SP")
-		dim(spn) = c(nt,length(lev),length(noms))
-	}
-
-	if (any(regexpr("\\<LNHDYN *= *T",nd) > 0)) {
-		if (has.levels) {
-			indi = indi+nflevg+2
-			indn = ind[1]+nflevg+3
-		} else {
-			indi = indi+2
-			indn = ind[1]+3
-		}
-
-		spnh = line2num(nd[indi])
-
-		nomsnh = strsplit(nd[indn]," {2,}")[[1]][-1]
-		nomsnh[nomsnh == "LOG(PRE/PREHYD)"] = "LOG(P/P_hyd)"
-		nomsnh[nomsnh == "d4 = VERT DIV + X"] = "d4 (= vdiv+X)"
-
-		dim(spnh) = c(length(nomsnh),length(lev),nt)
-		spnh = aperm(spnh,c(3,2,1))
-		spn = c(spn,spnh)
-		noms = c(noms,nomsnh)
-		dim(spn) = c(nt,length(lev),length(noms))
-	}
-
-	ip = grep("LOG\\(P/P_hyd\\)|d4",noms,invert=TRUE)
-	noms[ip] = abbreviate(noms[ip])
-
-	istep = sub(" *NORMS AT NSTEP CNT4( \\(PREDICTOR\\))? +(\\d+)","\\2",nd[ind-1])
-	dimnames(spn) = list(istep,lev,noms)
-
-	spn
-}
-
-countfield = function(ind,ind2,nl2)
-{
-	which(diff(ind[seq(ind2[1],ind2[2])]) > nl2)[1]
-}
-
-indexpand = function(ind,nf,nl2)
-{
-	rep(ind,each=nf)+(seq(nf)-1)*nl2
-}
-
 args = commandArgs(trailingOnly=TRUE)
 
 hasx11 = is.null(getarg("png",args)) && capabilities("X11")
 ask = hasx11 && interactive()
 if (! hasx11) cat("--> no X11 device, sending plots to PNG files\n")
 
-xaxis = data.frame(unit=c(1,3600,86400),label=sprintf("fc time (%s)",c("s","h","days")),
-	mindiff=c(0,86400,6*86400),freq=c(6,6,1))
+xaxis = data.frame(unit=c(1,60,3600,86400),label=sprintf("fc time (%s)",
+	c("s","mn","h","days")),mindiff=c(0,240,14400,6*86400),freq=c(6,1,6,1))
 
 pngd = getarg("png",args)
+if (is.null(pngd)) pngd = "."
 lev = as.integer(getarg("lev",args))
-if (is.null(lev)) lev = 0
+if (is.null(lev)) lev = 0L
 hmin = as.numeric(getarg("hmin",args))
 hmax = as.numeric(getarg("hmax",args))
 ptype = getarg("type",args)
@@ -204,13 +30,9 @@ if (is.null(ptype)) ptype = "spec"
 detail = regexpr("gp.+detail",ptype) > 0
 spre = getarg("spre",args)
 spref = getarg("spref",args)
-if (is.null(spref)) spref = "spnorm t0"
 gpre = getarg("gpre",args)
 gpref = getarg("gpref",args)
-if (is.null(gpref)) {
-	gpref = "gpnorm gmvt0"
-	if (any(ptype == "gpgfl")) gpref = "gpnorm gflt0"
-}
+
 fnode = grep("=",args,invert=TRUE,value=TRUE)
 stopifnot(length(fnode) == 1)
 
@@ -218,94 +40,133 @@ cat("Read file",fnode,"\n")
 nd = readLines(fnode)
 nd = grep("^ *$",nd,value=TRUE,invert=TRUE)
 nflevg = getvar("NFLEVG",nd)
-has.levels = getvar("NSPPR",nd) > 0
+has.levels = getvar(".*NSPPR",nd) > 0
 
-if (length(lev) > 1 || lev != 0) stopifnot(has.levels)
+grouplev = NULL
 if (length(lev) > 1) {
 	grouplev = lev
 	lev = seq(nflevg)
 } else if (lev == -1) {
+	if (! has.levels) {
+		cat("--> no level norms\n")
+		q("no")
+	}
+
 	lev = seq(nflevg)
 }
 
-nstop = getvar("NSTOP",nd)
+if (! identical(lev,0L)) stopifnot(has.levels)
+
 tstep = getvar("TSTEP",nd)
-icnt4 = grep("^ *START CNT4",nd)[1]
 
 if (interactive()) browser()
 
 if (ptype == "spec") {
 	cat("Parse spectral norms\n")
-	ind = grep("SPECTRAL NORMS",nd)
-	ind = ind[ind > icnt4]
-	# ind2: for corrector (one line may be interleaved)
-	ind1 = grep(sub("spnorm t0","NORMS AT NSTEP CNT4",spref),nd[ind-1])
-	ind2 = grep(sub("spnorm t0","NORMS AT NSTEP CNT4",spref),nd[ind-2])
-	if (length(ind2) > 0) ind1 = sort(c(ind1,ind2))
-	sp1 = spnorm(nd,lev,ind[ind1[-1]])
+	if (is.null(spref)) {
+		sp1 = spnorm(nd,lev)
+	} else {
+		sp1 = spnorm(nd,lev,spref)
+	}
+
+	if (is.null(sp1)) {
+		cat("--> no SP norms\n")
+		quit("no")
+	}
+
+	step = dimnames(sp1)[[1]]
+	ix = grep("^X",step)
+	if (length(ix) == length(step)) {
+		cat("--> SP norms for STEPX only, quit\n")
+		quit("no")
+	} else if (length(ix) > 0) {
+		cat("--> SP norms present for STEPX, remove",length(ix),"steps\n")
+		sp1 = sp1[-ix,,,drop=FALSE]
+		step = dimnames(gp1)[[1]]
+	}
+
+	istep = as.numeric(gsub("C(\\d+)","\\1.5",step))
+	cat(". steps:",head(step[-length(step)]),"...",step[length(step)],"\n")
+
 	spnoms = dimnames(sp1)[[3]]
 	spl = list(sp1)
 	leg = c("t0",sub("spnorm +","",spre))
 	for (i in seq(along=spre)) {
 		cat("Parse spectral norms, pattern",spre[i],"\n")
-		ind2 = grep(spre[i],nd[ind-1],ignore.case=TRUE)
-		if (length(ind2) == 0) {
+		spi = spnorm(nd,lev,spre[i])
+		if (is.null(spi)) {
 			cat("--> no norms for pattern:",spre[i],"\n")
 			next
 		}
 
-		indv = match(spnoms,dimnames(sp1)[[3]])
+		indv = match(spnoms,dimnames(spi)[[3]])
 		stopifnot(any(! is.na(indv)))
-		spi = spnorm(nd,lev,ind[ind2])
-		spl[[i+1]] = spi[,,indv,drop=FALSE]
+
+		stepi = dimnames(spi)[[1]]
+		inds = match(step,stepi)
+		stopifnot(any(! is.na(inds)))
+		spl[[i+1]] = spi[inds,,indv,drop=FALSE]
 	}
 
-	leg = leg[seq(along=spl)]
+	leg = leg[which(! sapply(spl,is.null))]
+	spl = spl[! sapply(spl,is.null)]
 
-	nfrsdi = getvar(".+ NFRSDI",nd)
-	nsdits = getvar("NSDITS",nd)
-	if (nsdits[1] != 0) message("Warning: possible crash for SP plot (NSDITS != 0)")
-	istep = seq(1,nstop,by=nfrsdi)
+	stepc = step[regexpr("C\\d+",step) > 0]
+	if (length(stepc) > 0) {
+		cat("--> PC scheme, split P/C steps\n")
+		indc = match(stepc,step)
+		ip = which(step %in% step[-indc])
+		indc = match(paste("C",step[ip],sep=""),step)
+		splc = lapply(spl,function(spi) spi[indc,,,drop=FALSE])
+		splp = lapply(spl,function(spi) spi[ip,,,drop=FALSE])
+		spl = c(splp,splc)
+		leg = c(leg,paste(leg,"Cor"))
+		istep = istep[ip]
+		sp1 = spl[[1]]
+	}
 
 	nf = length(spnoms)
 	nt = dim(sp1)[1]
-	if (length(istep) > nt) length(istep) = nt
 	times = tstep*istep
 
 	if (length(lev) > 1) {
 		cat("Produce vertical profiles at start/mid/end of time\n")
-		levels = seq(nflevg)
 		indt = c(1,(nt+1)%/%2,nt)
-		tt = sprintf("Spectral norm of %s",spnoms)
-		ylim = rev(range(levels))
-		nc = min(nf,3)
-		nr = min(1+(nf-1)%/%nc,3)
-		nj = nc*nr
+		tt = sprintf("SP norm of %s",spnoms)
+		ts = sprintf("t%s",paste(istep[indt],collapse="/"))
+		nc = min(nf,2)
+		nr = min(length(spl),2)
+		nj = nc
 
 		for (i in seq((nf-1)%/%nj+1)-1) {
 			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 			if (! hasx11) png(sprintf("%s/spnormv%d.png",pngd,i))
 
-			par(mfrow=c(nr,nc),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-			for (j in 1:min(nf-nj*i,nj)+nj*i) {
-				cat(". SP field",spnoms[j],"\n")
-				matplot(t(sp1[indt,,j]),levels,type="l",lty=1:3,col=1,ylim=ylim,
-					xlab=spnoms[j],ylab="Level",main=tt[j])
-				abline(v=0,col="darkgrey",lty=2)
+			par(mfcol=c(nr,nc),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+			for (j in seq(min(nf-nj*i,nj))+nj*i) {
+				y = t(sp1[indt,,j])
+				plotvmean(y,lev,xlab=spnoms[j],main=c(tt[j],ts))
+
+				if (length(spl) == 1) next
+
+				y = sapply(spl,function(x) x[indt[2],,j],simplify="array")
+				ts2 = sprintf("t%s",istep[indt[2]])
+				plotvmean(y,lev,xlab=spnoms[j],main=c(tt[j],ts2),lty=c(1,2,2),
+					col=seq(along=spl),legend=leg)
 			}
 
 			if (! hasx11) dev.off()
 		}
 
-		if (length(grouplev) > 1) {
+		if (! is.null(grouplev)) {
 			cat("--> groups of levels:",grouplev,"\n")
 			indg = 0
 			leg = character()
 			for (i in seq(along=grouplev)) {
-				indi = which(levels <= grouplev[i])
+				indi = which(lev <= grouplev[i])
 				indg = indi[indi > max(indg)]
 				cat(".. level indices:",range(indg),"\n")
-				leg[i] = sprintf("L %d-%d",min(indg),max(indg))
+				leg[i] = sprintf("Lev %d-%d",min(indg),max(indg))
 				spi = sp1[,1,,drop=FALSE]
 				spi[] = apply(sp1[,indg,,drop=FALSE],c(1,3),mean)
 				spl[[i]] = spi
@@ -318,24 +179,25 @@ if (ptype == "spec") {
 
 	if (length(lev) == 1) {
 		cat("Produce time-series per variable\n")
-		if (dim(sp1)[1] == 1) stop("1 time-step only (stop)\n")
-
-		if (any(sapply(spl,function(x) dim(x)[1]) > nt)) {
-			cat("--> limiting norms to",nt,"occurrences\n")
-			spl = lapply(spl,function(x) x[1:nt,,,drop=FALSE])
+		if (dim(sp1)[1] == 1) {
+			cat("--> 1 time-step only, quit\n")
+			quit("no")
 		}
 
 		if (length(spl) > 1) {
 			con = file(sprintf("%s/%s.txt",pngd,ptype),"wt")
-			cat("Norm diff. tendency for patterns:\n",
-				paste(sprintf("'%s'",spre),collapse=" "),"\n",file=con)
 			for (i in seq(along=spl)[-1]) {
-				spdiff = matrix(spl[[i]][,1,]-spl[[i-1]][,1,],ncol=nf)
+				cat("Norm diff. tendency for patterns:\n",sprintf("'%s'",leg[(i-1):i]),"\n",
+					file=con)
 				iv = which(! is.na(dimnames(spl[[i]])[[3]]))
-				a = apply(spdiff[,iv,drop=FALSE],2,function(x) coef(line(x))[2])
-				s = apply(spdiff[,iv,drop=FALSE],2,function(x) sd(residuals(line(x))))
+				spdiff = spl[[i]][,1,iv,drop=FALSE]-spl[[i-1]][,1,iv,drop=FALSE]
+				a = apply(spdiff,3,function(x) coef(line(x))[2])
+				s = apply(spdiff,3,function(x) sd(residuals(line(x))))
 				cat("\n",file=con)
-				write.table(rbind(tend=a,sd=s),con,quote=FALSE,col.names=FALSE)
+				evo = rbind(tend=a,sd=s)
+				evo = format(evo,digits=3,width=9)
+				cat("field",format(dimnames(evo)[[2]],width=9),"\n",sep="\t",file=con)
+				write.table(evo,con,quote=FALSE,col.names=FALSE,sep="\t")
 			}
 
 			close(con)
@@ -355,16 +217,17 @@ if (ptype == "spec") {
 		it = which(ttime >= xlim[1] & ttime <= xlim[2])
 		ttime = ttime[it]
 		x = pretty(ttime[it]/tfreq,7)*tfreq
+		xaxp = c(range(x),length(x)-1)
 		spl = lapply(spl,function(x) x[it,,,drop=FALSE])
 		sp1 = spl[[1]]
 
 		cat("Spectral norms",spref,"\n")
-		titre = paste("Spectral norm of",spnoms)
+		titre = paste("SP norm of",spnoms)
 		if (lev > 0) titre = paste(titre,"- lev",lev)
 
-		# 4 rows max, 2 columns
+		# 2 rows, 2 columns
 		nc = 2
-		nr = min(1+(nf-1)%/%2,4)
+		nr = min(1+(nf-1)%/%2,2)
 		nj = nr*nc
 		for (i in seq((nf-1)%/%nj+1)-1) {
 			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
@@ -375,111 +238,105 @@ if (ptype == "spec") {
 			for (j in 1:min(nf-nj*i,nj)+nj*i) {
 				cat(". SP field",spnoms[j],"\n")
 				y = sapply(spl,function(x) x[,1,j])
-				ymax = max(abs(y))
+				ymax = max(abs(y),na.rm=TRUE)
 				scal = 10^-round(log10(ymax/1.5))
 				if (.001 <= scal && scal < 1) scal = 1
-				col = lty = seq(along=spl)
-				lty[-1] = 2
-				matplot(ttime,y*scal,type="l",lty=lty,col=col,xlim=xlim,xlab=xlab,
-					ylab=spnoms[j],main=titre[j],xaxt="n")
-				legend("topleft",leg,col=col,lty=lty,bg="transparent")
-
-				axis(1,x)
-				reg = line(ttime,sp1[,1,j]*scal)
-				abline(reg,lty=2)
-				tend = coef(reg)[2]*86400/tunit*scal
-				tt = sprintf("Trend: %+.2e [unit]/day",tend)
-				if (scal != 1) tt = sprintf("%s, scaling: *%.0e",tt,scal)
-				if (tunit == 86400) {
-					tt = sprintf("%s, variation: %.2g",tt,tend*diff(range(ttime)))
-				}
-
-				mtext(tt,lty=2,cex=par("cex"))
+				plotmean(ttime,y,titre[j],leg,tunit,xlim=xlim,xlab=xlab,ylab=spnoms[j],
+					xaxp=xaxp,scale=scal)
 			}
-
-			if (! hasx11) dev.off()
 		}
 	}
 }
 
 if (regexpr("^gp",ptype) > 0) {
 	cat("Parse GP norms of type",ptype,"\n")
-	# don't take step 0
-	nfrgdi = getvar(".+ NFRGDI",nd)
-	ngdits = getvar("NGDITS",nd)
-	if (ngdits[1] != 0) message("Warning: possible crash for GP plot (NGDITS != 0)")
-	istep = seq(1,nstop,by=nfrgdi)
-
-	gpfre1 = "[UVW] VELOCITY|(SURFACE )?PRESSURE|TEMPERATURE|GRAD[LM]_\\w+|GEOPOTENTIAL"
-	gpfre2 = "MOIST AIR SPECIF|ISOBARE CAPACITY|SURFACE DIV|d\\(DIV\\)\\*dP"
-	gpfre3 = "(ATND|ADIAB|CTY|(SI)?SL)_\\w+"
-	gpfre = paste(gpfre1,gpfre2,gpfre3,sep="|")
-
-	nl2 = 2+has.levels*nflevg
-
 	if (regexpr("gpgfl",ptype) > 0) {
-		ind = grep("GPNORM +\\w+.* +AVERAGE",nd)
-		ind = ind[ind > icnt4]
-		indo = grep(sprintf("GPNORM +(%s|OUTPUT) +AVERAGE",gpfre),nd[ind],invert=TRUE)
-		ind = ind[indo]
-		ind1 = grep(gpref,nd[ind-1])
-		if (length(ind1) == 0) {
-			ind1 = grep("NORMS AT NSTEP CNT4",nd[ind-2-nl2])
-			if (length(ind1) == 0) ind1 = grep("NORMS AT NSTEP CNT4",nd[ind-3-nl2])
-			if (length(ind1) == 0) ind1 = grep("NORMS AT NSTEP CNT4",nd[ind-4-nl2])
-		}
-
-		nf = countfield(ind,ind1,nl2)
-		indi = indexpand(ind[ind1],nf,nl2)
-		gp1 = gpnorm(nd,lev,indi)
-		if (dim(gp1)[1] > length(istep)) gp1 = gp1[-1,,,,drop=FALSE]
-
-		gpl = list(gp1)
+		gp1 = gpnorm(nd,lev,gpout=gpfre)
 	} else {
-		ind = grep(sprintf("GPNORM +(%s) +AVERAGE",gpfre),nd)
-		ind = ind[ind > icnt4]
-		ind1 = grep(gpref,nd[ind-1],ignore.case=TRUE)
-		nf = countfield(ind,ind1,nl2)
-		indi = indexpand(ind[ind1],nf,nl2)
-		gp1 = gpnorm(nd,lev,indi)
-		if (dim(gp1)[1] > length(istep)) gp1 = gp1[-1,,,,drop=FALSE]
-		gpl = list(gp1)
+		gp1 = gpnorm(nd,lev,gpref,gpfre)
 	}
+
+	if (is.null(gp1)) {
+		cat("--> no GP norms, quit\n")
+		quit("no")
+	}
+
+	i0 = apply(gp1,1,function(x) all(x==0))
+	if (any(i0) && ! all(i0)) {
+		cat("--> GP norms all 0 for some steps, removed\n")
+		gp1 = gp1[-which(i0),,,,drop=FALSE]
+	}
+
+	step = dimnames(gp1)[[1]]
+	cat(". steps:",head(step[-length(step)]),"...",step[length(step)],"\n")
+
+	ix = grep("^X",step)
+	if (length(ix) == length(step)) {
+		cat("--> GP norms for STEPX only, quit\n")
+		quit("no")
+	} else if (length(ix) > 0) {
+		cat("--> GP norms present for STEPX, remove",length(ix),"steps\n")
+		gp1 = gp1[-ix,,,,drop=FALSE]
+		step = dimnames(gp1)[[1]]
+	}
+
+	istep = as.numeric(gsub("C(\\d+)","\\1.5",step))
+	gpl = list(gp1)
 
 	gpnoms = dimnames(gp1)[[4]]
 	leg = c("t0",sub("gpnorm +","",gpre))
 	for (i in seq(along=gpre)) {
-		ind2 = grep(gpre[i],nd[ind-1],ignore.case=TRUE)
-		if (length(ind2) == 0) {
+		if (regexpr("gpgfl",ptype) > 0) {
+			gpi = gpnorm(nd,lev,gpre[i],gpout=gpfre)
+		} else {
+			gpi = gpnorm(nd,lev,gpre[i],gpfre)
+		}
+
+		if (is.null(gpi)) {
 			cat("--> no norms for pattern",gpre[i],"\n")
 			next
 		}
 
-		nf = countfield(ind,ind2,nl2)
-		indi = indexpand(ind[ind2],nf,nl2)
-		gpi = gpnorm(nd,lev,indi)
-		if (dim(gpi)[1] > length(istep)) gpi = gpi[-1,,,,drop=FALSE]
+		i0 = apply(gpi,1,function(x) all(x==0))
+		if (all(i0)) {
+			cat("--> GFL all 0 for all steps, continue\n")
+			next
+		} else if (any(i0)) {
+			cat("--> GFL all 0 for some steps, removed\n")
+			gpi = gpi[-which(i0),,,,drop=FALSE]
+		}
+
 		indv = match(gpnoms,dimnames(gpi)[[4]])
 		stopifnot(any(! is.na(indv)))
-		gpl[[i+1]] = gpi[,,,indv,drop=FALSE]
+
+		stepi = dimnames(gpi)[[1]]
+		ix = grep("^X",stepi)
+		if (length(ix) > 0) {
+			gpi = gpi[-ix,,,,drop=FALSE]
+			stepi = dimnames(gpi)[[1]]
+		}
+
+		inds = match(step,stepi)
+		stopifnot(any(! is.na(inds)))
+		gpl[[i+1]] = gpi[inds,,,indv,drop=FALSE]
 	}
 
-	leg = leg[seq(along=gpl)]
+	leg = leg[which(! sapply(gpl,is.null))]
+	gpl = gpl[! sapply(gpl,is.null)]
 
 	nf = length(gpnoms)
 	nt = dim(gp1)[1]
-	if (length(istep) > nt) length(istep) = nt
 
 	times = tstep*istep
 
 	if (length(lev) > 1) {
 		cat("Produce vertical profiles\n")
-		levels = seq(nflevg)
+		tt = sprintf("GP norm of %s",gpnoms)
 		indt = c(1,(nt+1)%/%2,nt)
+		ts = sprintf("t%s",paste(istep[indt],collapse="/"))
 		nc = 3
-		nr = 2
-		nj = nr
-		ylim = rev(range(levels))
+		nr = min(length(gpl),2)
+		nj = 3-nr
 
 		for (i in seq((nf-1)%/%nj+1)-1) {
 			if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
@@ -489,24 +346,25 @@ if (regexpr("^gp",ptype) > 0) {
 
 			for (j in 1:min(nf-nj*i,nj)+nj*i) {
 				cat(". GP field",gpnoms[j],"\n")
-				tt = sprintf("GP norm of %s",gpnoms[j])
-				tt2 = c("ave","min","max")
-				for (k in c(2,1,3)) {
-					matplot(t(gp1[indt,,k,j]),levels,type="l",lty=1:3,col=1,ylim=ylim,
-						xlab=gpnoms[j],ylab="Level",main=c(tt,tt2[k]))
-					abline(v=0,col="darkgrey",lty=2)
-				}
-			}
+				y = aperm(gp1[indt,,,j],c(2,1,3))
+				plotvmnx(y,lev,xlab=gpnoms[j],main=c(tt[j],ts))
 
-			if (! hasx11) dev.off()
+				if (length(gpl) == 1) next
+
+				y = sapply(gpl,function(x) x[indt[2],,,j],simplify="array")
+				y = aperm(y,c(1,3,2))
+				il = which(apply(y,2,function(x) any(! is.na(x))))
+				ts2 = sprintf("t%d",indt[2])
+				plotvmnx(y,lev,xlab=gpnoms[j],main=c(tt[j],ts2),legend=leg[il],lty=2,col=il)
+			}
 		}
 
-		if (length(grouplev) > 1) {
+		if (! is.null(grouplev)) {
 			cat("--> groups of levels:",grouplev,"\n")
 			indg = 0
 			leg = character()
 			for (i in seq(along=grouplev)) {
-				indi = which(levels <= grouplev[i])
+				indi = which(lev <= grouplev[i])
 				indg = indi[indi > max(indg)]
 				cat(".. level indices:",range(indg),"\n")
 				leg[i] = sprintf("L %d-%d",min(indg),max(indg))
@@ -528,15 +386,18 @@ if (regexpr("^gp",ptype) > 0) {
 
 		if (length(gpl) > 1) {
 			con = file(sprintf("%s/%s.txt",pngd,ptype),"wt")
-			cat("Norm diff. tendency for patterns:\n",
-				paste(sprintf("'%s'",gpre),collapse=" "),"\n",file=con)
 			for (i in seq(along=gpl)[-1]) {
-				gpdiff = matrix(gpl[[i]][,1,1,]-gpl[[i-1]][,1,1,],ncol=dim(gpl[[i]])[4])
+				cat("Norm diff. tendency for patterns:\n",sprintf("'%s'",leg[(i-1):i]),"\n",
+					file=con)
 				iv = which(! is.na(dimnames(gpl[[i]])[[4]]))
-				a = apply(gpdiff[,iv,drop=FALSE],2,function(x) coef(line(x))[2])
-				s = apply(gpdiff[,iv,drop=FALSE],2,function(x) sd(residuals(line(x))))
+				gpdiff = gpl[[i]][,1,1,iv,drop=FALSE]-gpl[[i-1]][,1,1,iv,drop=FALSE]
+				a = apply(gpdiff,4,function(x) coef(line(x))[2])
+				s = apply(gpdiff,4,function(x) sd(residuals(line(x))))
 				cat("\n",file=con)
-				write.table(rbind(tend=a,sd=s),con,quote=FALSE,col.names=FALSE)
+				evo = rbind(tend=a,sd=s)
+				evo = format(evo,digits=3,width=9)
+				cat("field",format(dimnames(evo)[[2]],width=9),"\n",sep="\t",file=con)
+				write.table(evo,con,quote=FALSE,col.names=FALSE,sep="\t")
 			}
 
 			close(con)
@@ -556,6 +417,7 @@ if (regexpr("^gp",ptype) > 0) {
 		it = which(ttime >= xlim[1] & ttime <= xlim[2])
 		ttime = ttime[it]
 		x = pretty(ttime[it]/tfreq,7)*tfreq
+		xaxp = c(range(x),length(x)-1)
 		gpl = lapply(gpl,function(x) x[it,,,,drop=FALSE])
 		gp1 = gpl[[1]]
 
@@ -584,64 +446,22 @@ if (regexpr("^gp",ptype) > 0) {
 			par(mfrow=c(nr,nc),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 
 			for (j in 1:min(nf-nj*i,nj)+nj*i) {
-				y = sapply(gpl,function(x) x[,1,1,j])
-				ymax = max(abs(y))
+				y = sapply(gpl,function(x) x[,1,,j],simplify="array")
+				il = apply(y,3,function(x) any(! is.na(x)))
+				ymax = max(abs(y[,1,]),na.rm=TRUE)
 				scal = 10^-round(log10(ymax/1.5))
 				if (.001 <= scal && scal < 1 || is.infinite(scal)) scal = 1
 				cat(". GP field",gpnoms[j],"- scaling:",scal,ymax,"\n")
-				col = lty = seq(along=gpl)
-				lty[-1] = 2
-				matplot(ttime,y*scal,type="l",lty=lty,col=col,xlim=xlim,xlab=xlab,
-					ylab=gpnoms[j],main=paste(titre[j],"(ave)"),xaxt="n")
+				plotmean(ttime,y[,1,],main=titre[j],leg[il],tunit,xlim=xlim,xlab=xlab,
+					ylab=gpnoms[j],xaxp=xaxp,scale=scal)
 
-				reg = line(ttime,gp1[,1,1,j]*scal)
-				abline(reg,lty=2)
-				tend = coef(reg)[2]*86400/tunit
-				tt = sprintf("Trend: %+.2e [unit]/day",tend)
-				if (scal != 1) tt = sprintf("%s, scaling: *%.0e",tt,scal)
-				if (tunit == 86400) {
-					tt = sprintf("%s, variation: %.2g",tt,tend*diff(range(ttime)))
-				}
-
-				legend("topleft",leg,col=col,lty=lty,bg="transparent")
-				mtext(tt,cex=1.1*par("cex"))
-				axis(1,x)
-				if (all(gp1[,1,,j] == 0)) text(sum(range(ttime))/2,.5,"all values = 0")
-
-				y = sapply(gpl,function(x) x[,1,,j])
-				matplot(ttime,gp1[,1,,j],type="l",lty=ltymnx,xlab=xlab,ylab=gpnoms[j],
-					xlim=xlim,ylim=range(y),main=paste(titre[j],"(ave/min/max)"),col=1,
-					xaxt="n")
-				axis(1,x)
-				for (k in seq(along=gpl)[-1]) {
-					if (all(is.na(gpl[[k]][,1,,j]))) next
-					matlines(ttime,gpl[[k]][,1,,j],lty=ltymnx,col=k)
-				}
+				plotmnx(ttime,y,titre[j],xlim=xlim,xlab=xlab,ylab=gpnoms[j],xaxp=xaxp)
 
 				if (! detail) next
 
-				y = sapply(gpl,function(x) x[,1,2,j])
-				matplot(ttime,gp1[,1,2,j],type="l",lty=ltymnx[2],xlab=xlab,
-					ylab=gpnoms[j],xlim=xlim,ylim=range(y),main=paste(titre[j],"(min)"),col=1,
-					xaxt="n")
-				axis(1,x)
-				for (k in seq(along=gpl)[-1]) {
-					if (all(is.na(gpl[[k]][,1,2,j]))) next
-					matlines(ttime,gpl[[k]][,1,2,j],lty=ltymnx[2],col=k)
-				}
-
-				y = sapply(gpl,function(x) x[,1,3,j])
-				matplot(ttime,gp1[,1,3,j],type="l",lty=ltymnx[3],xlab=xlab,
-					ylab=gpnoms[j],xlim=xlim,ylim=range(y),main=paste(titre[j],"(max)"),col=1,
-					xaxt="n")
-				axis(1,x)
-				for (k in seq(along=gpl)[-1]) {
-					if (all(is.na(gpl[[k]][,1,3,j]))) next
-					matlines(ttime,gpl[[k]][,1,3,j],lty=ltymnx[3],col=k)
-				}
+				plotmnx(ttime,y,titre[j],imnx=2,xlim=xlim,xlab=xlab,ylab=gpnoms[j],xaxp=xaxp)
+				plotmnx(ttime,y,titre[j],imnx=3,xlim=xlim,xlab=xlab,ylab=gpnoms[j],xaxp=xaxp)
 			}
-
-			if (! hasx11) dev.off()
 		}
 	}
 }
@@ -657,3 +477,4 @@ if (ptype == "surf") {
 		print(msurf)
 	}
 }
+
