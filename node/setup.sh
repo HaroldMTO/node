@@ -59,11 +59,11 @@ if [ -z "$fin" -o -z "$fout" ]
 then
 	echo "Error: mandatory arguments missing
 fin: '$fin'
-fout: '$fout'
-png: '$png'" >&2
+fout: '$fout'" >&2
 	exit 1
 fi
 
+echo "NODE file $fin"
 ls -L $fin > /dev/null
 
 if ! file -L $fin | grep -q text
@@ -80,7 +80,10 @@ then
 	fin=$ftmp
 fi
 
-grep -qi 'END OF SETUPS' $fin || echo "Warning: no text \"END OF SETUPS\" in $fin" >&2
+if ! grep -qi 'END OF SETUPS' $fin
+then
+	echo "Warning: no text \"END OF SETUPS\" in $fin" >&2
+fi
 
 type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
 
@@ -88,18 +91,19 @@ if [ -z "$png" ]
 then
 	if echo $fin | grep -qEi '(.+/)?\<node\.?\w+'
 	then
-		png=$(echo $fin | sed -re 's:(.+/)?\<node\.?(\w+):\1\2:i')
+		png=$(echo $fin | sed -re 's:(.+/)?\<node\.?(\w+):\2:i')
 	else
 		loc=$(dirname $fin)
-		png=$(mktemp -d -p $loc setupXXX)
+		png=$(mktemp -d setupXXX)
 	fi
 fi
 
 mkdir -p $png
-echo "--> output dir is $png"
+echo "Parse NODE file (PNG graphics in $png)"
 
-R --slave -f $diags/procmap.R --args ficin=$fin png=$png > $png/out.txt
+R --slave -f $diags/procmap.R --args ficin=$fin png=$png
 
+echo "Write HTML file $fout"
 {
 	echo "<pre>"
 	grep -A 1 -iw values $png/out.txt || true
@@ -107,8 +111,10 @@ R --slave -f $diags/procmap.R --args ficin=$fin png=$png > $png/out.txt
 	echo "</pre>"
 } > $png/map.txt
 
+[ -s $png/jo.txt ] || echo "no Jo tables" > $png/jo.txt
+
 date=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
 res=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
 base=$(printf "%s %dh" $date $((res/3600)))
 sed -re "s:TAG NODE:$fin:" -e "s:TAG BASE:$base:" -e "s:TAG DIR:$png:g" \
-	-e "/TAG MAP/r $png/map.txt" $diags/setup.html > $fout
+	-e "/TAG MAP/r $png/map.txt" -e "/TAG JO/r $png/jo.txt" $diags/setup.html > $fout
