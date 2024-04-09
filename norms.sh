@@ -1,6 +1,6 @@
 #!/bin/sh
 
-diags=~/util/diags
+node=~/util/node
 
 set -e
 
@@ -8,34 +8,36 @@ usage()
 {
 	printf "
 Description:
-	Produce an HTML file related to plots of SP/GP norms from model forecast (NODE files)
+	Produce an HTML file showing plots of SP/GP norms from model forecast (NODE files)
 
 Usage:
-	plot.sh FILE -o HTML [-lev (LEV|I1:I2:...)] [-detail] [-opt OPTIONS] [-h]
+	norms.sh FILE1 FILE2... -o HTML [-lev (LEV|I1:I2:...)] [-detail] [-nogfl] [-nogmv] \
+[-noadiab] [-noslb2] [-opt OPTIONS] [-h]
 
 Options:
-	FILE: text file containing lines made of NODE file names and their description
-	HTML: output file containing HTML content (text and links to images)
+	FILE1, FILE2,...: NODE files containing SP and/or GP norms to plot (see Details)
+	HTML: output file containing HTML content and links to PNG files
 	-lev LEV: produce plots for level LEV, an index among the model levels. Default is 0 \
-and stands for the summary level (ie level 'AVE')
+and stands for the summary level (ie level 'AVE'). If LEV is -1, plots are vertical \
+profiles.
 	-lev I1:I2:...: produce plots for groups of levels
 	-detail: activate 'detailed' plots for gpnorm (graphics contain 4 plots instead of 2)
+	-nogfl,nogmv,...: deactivate plots for this kind of norms. SP norms cannot!
 	OPTIONS: options to pass to the R script, in the form key=value, separated by space \
 and with keys among hmin, hmax (see Options)
 	-h: print this help and exit normally
 
 Details:
-	Lines in the input text file must match 'NODEFILE: description...'. Within lines, \
-blanks are ignored and colon (':') is the separator. Case is also ignored for NODE \
-filename. These NODE file names must begin with 'NODE' (or 'node'). Description is what \
-follows the separator ':'.
-	Plots are produced in directories named after NODE files, prefix 'NODE'/'node' being \
-deleted.
-	A single HTML file is produced, containing text and images from these NODE files.
-	When option '-lev' is passed, level norms must exist in NODE files. \
-For option in form '-lev I1:I2:...', values are indicated by integer values, separated \
-with colon. Values indicate 'breaks', where group i contains levels from 1 to i, but \
-not belonging to preceding groups (ie groups do not overlap).
+	NODE file names must begin with 'NODE' (or 'node'). One file at least is mandatory.
+	Plots are produced in one single directory named after the 1st NODE file, its prefix \
+'NODE'/'node' being deleted. If several NODE files are passed, plots show curves for \
+all the files but for main norms only. Il one single file is passed, plots show curves \
+for all the norms printed.
+	A single HTML file is produced, containing text and images from all NODE files.
+	When option '-lev' is passed, level norms must exist in NODE files. For option \
+in form '-lev I1:I2:...', values are indicated by integer values, separated \
+with colon. These values indicate 'breaks', where group i contains levels from 1 to i, \
+but not belonging to preceding groups (ie groups do not overlap).
 
 Options:
 	Options passed with argument '-opt' consist in 1 character string (-> use quotes) \
@@ -54,6 +56,7 @@ fi
 
 norms="gmvgfladiabslb2"
 fin=""
+fin2=""
 fout=""
 suf=""
 lev=0
@@ -84,7 +87,7 @@ do
 		exit
 		;;
 	*)
-		fin=$1
+		[ -z "$fin" ] && fin=$1 || fin2="$fin2 $1"
 		;;
 	esac
 
@@ -107,124 +110,113 @@ temp=$(mktemp -d -t plotXXX)
 
 trap 'rm -r $temp' 0
 
-if grep -qEi '^ \w+:\w+:\w+ +STEP +[0-9]+' $fin
+if ! grep -qEi '^ \w+:\w+:\w+ +STEP +[0-9]+' $fin
 then
-	# make fic local (no path management in info.txt)
-	cd $(dirname $fin) > /dev/null
-	fin=$(basename $fin)
-	echo "$fin: no description" > $temp/info.txt
-elif ! grep -Ei '^\s*node\.?\w+ *:? *\w' $fin > $temp/info.txt
-then
-	echo "Error: pattern 'NODExxx: ...' not found in $fin" >&2
+	echo "$fin: no 'STEP...' in $fin" >&2
 	exit 1
 fi
 
-loc=$(dirname $fin)
-xpdir=$(cd $loc > /dev/null && pwd)
+if [ -d $fout ]
+then
+	fout=$fout/norms.html
+	echo "HTML output file: $fout"
+fi
 
-cd $temp > /dev/null
+loc=$(dirname $fout)
 
 type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
 env | grep -qw R_LIBS || export R_LIBS=~/lib
 
-while read fnode desc
+fic=$(echo $fin | sed -re 's/^\s*(node\.?\w+[^ :]*) *:?/\1/i')
+ls -L $fic > /dev/null
+
+if ! { file -L $fic | grep -qE "(ASCII|UTF-8 Unicode) text" &&
+	grep -iqE '^ \w+:\w+:\w+ +STEP +[0-9]+' $fic; }
+then
+	echo "--> file not text nor model forecast" >&2
+	continue
+fi
+
+dd=$loc/$(echo $fic | sed -re 's:^(.+/)?node\.?(\w+):\2:i')
+mkdir -p $dd
+echo "--> output sent to $dd"
+
+grep -q 'END CNT0' $fic || echo "Warning: no 'END CNT0', program may crash" >&2
+
+echo "SP norms for SPEC"
+R --slave -f $node/spnorms.R --args $fic $fin2 lev=$lev \
+	spre="spnorm t1 *tr(ansdir)?:spnorm t1si:spnorm t1 spcm" png=$dd $ropt
+
+if echo $norms | grep -q gfl
+then
+	echo "GP norms for GFL"
+	R --slave -f $node/gpnorms.R --args $fic $fin2 lev=$lev type=gpgfl$suf \
+		gpre="gpnorm gflt1 (call_)?sl$:gpnorm gflt1 slmf:gpnorm gflt1 (cpg)?lag:gpnorm gfl tstep" png=$dd $ropt
+fi
+
+if grep -iqE "gpnorm gmvt0" $fic && echo $norms | grep -q gmv
+then
+	echo "GP norms for GMV"
+	R --slave -f $node/gpnorms.R --args $fic $fin2 lev=$lev type=gpgmv$suf \
+		gpref="gpnorm gmvt0" gpre="gpnorm gmvt1 sl:gpnorm gmvt1 slmf:gpnorm gmvt1 cpglag" \
+		png=$dd $ropt
+fi
+
+if grep -iqE "gpnorm adiab" $fic && echo $norms | grep -q adiab
+then
+	echo "GP norms for ADIAB"
+	R --slave -f $node/gpnorms.R --args $fic $fin2 lev=$lev type=gpadiab$suf \
+		gpref="gpnorm adiab" png=$dd $ropt
+fi
+
+if grep -iqE "gpnorm zb2" $fic && echo $norms | grep -q slb2
+then
+	echo "GP norms for ZB2"
+	R --slave -f $node/gpnorms.R --args $fic $fin2 lev=$lev type=gpsi$suf \
+		gpref="gpnorm zb2 cpg$" gpre="gpnorm zb2 (call_)?sl$:gpnorm zb2 slmf" png=$dd \
+		$ropt
+fi
+
+for pre in sp gpgmv$suf gpgfl$suf gpadiab$suf gpsi$suf
 do
-	echo "Line read: '$fnode' '$desc'"
-	fic=$(echo $fnode | sed -re 's/^\s*(node\.?\w+) *:?/\1/i')
-	ls -L $xpdir/$fic > /dev/null
-
-	if ! { file -L $xpdir/$fic | grep -qE "(ASCII|UTF-8 Unicode) text" &&
-		grep -iqE '^ \w+:\w+:\w+ +STEP +[0-9]+' $xpdir/$fic; }
-	then
-		echo "--> file not text nor model forecast" >&2
-		continue
-	fi
-
-	dd=$(echo $fic | sed -re 's:^node\.?(\w+):\1:i')
-	mkdir -p $xpdir/$dd
-	echo "--> output sent to $loc/$dd"
-
-	grep -q 'END CNT0' $xpdir/$fic || echo "Warning: no 'END CNT0', program may crash" >&2
-
-	echo "SP norms for SPEC"
-	R --slave -f $diags/norms.R --args $xpdir/$fic lev=$lev type=spec \
-		spre="spnorm t1 *tr(ansdir)?:spnorm t1si:spnorm t1 spcm" png=$xpdir/$dd $ropt
-
-	if echo $norms | grep -q gfl
-	then
-		echo "GP norms for GFL"
-		R --slave -f $diags/norms.R --args $xpdir/$fic lev=$lev type=gpgfl$suf \
-			gpre="gpnorm gflt1 (call_)?sl$:gpnorm gflt1 slmf:gpnorm gflt1 (cpg)?lag:gpnorm gfl tstep" png=$xpdir/$dd $ropt
-	fi
-
-	if grep -iqE "gpnorm gmvt0" $xpdir/$fic && echo $norms | grep -q gmv
-	then
-		echo "GP norms for GMV"
-		R --slave -f $diags/norms.R --args $xpdir/$fic lev=$lev type=gpgmv$suf \
-			gpref="gpnorm gmvt0" gpre="gpnorm gmvt1 sl:gpnorm gmvt1 slmf:gpnorm gmvt1 cpglag" \
-			png=$xpdir/$dd $ropt
-	fi
-
-	if grep -iqE "gpnorm adiab" $xpdir/$fic && echo $norms | grep -q adiab
-	then
-		echo "GP norms for ADIAB"
-		R --slave -f $diags/norms.R --args $xpdir/$fic lev=$lev type=gpadiab$suf \
-			gpref="gpnorm adiab" png=$xpdir/$dd $ropt
-	fi
-
-	if grep -iqE "gpnorm zb2" $xpdir/$fic && echo $norms | grep -q slb2
-	then
-		echo "GP norms for ZB2"
-		R --slave -f $diags/norms.R --args $xpdir/$fic lev=$lev type=gpsi$suf \
-			gpref="gpnorm zb2 cpg$" gpre="gpnorm zb2 (call_)?sl$:gpnorm zb2 slmf" png=$xpdir/$dd \
-			$ropt
-	fi
-
-	for pre in sp gpgmv$suf gpgfl$suf gpadiab$suf gpsi$suf
+	echo "HTML files for $pre"
+	for s in "" v
 	do
-		echo "HTML files for $pre"
-		for s in "" v
+		echo "<tr>"
+
+		n=0
+		for ficp in $(ls -1 $dd | grep -E "${pre}norm$s[[:digit:]]+\.png")
 		do
-			echo "<tr>"
-
-			n=0
-			for ficp in $(ls -1 $xpdir/$dd | grep -E "${pre}norm$s[[:digit:]]+\.png")
-			do
-				if [ $n -eq 2 ]
-				then
-					echo -e "</tr>\n<tr>\n"
-					n=0
-				fi
-
-				n=$((n+1))
-				printf "\t<td><img src=\"%s\"/></td>\n" $loc/$dd/$ficp
-			done
-
-			if [ -s $xpdir/$dd/$pre$s.txt ]
+			if [ $n -eq 2 ]
 			then
-				echo -e "\t<td><pre>\n"
-				cat $xpdir/$dd/$pre$s.txt
-				echo "</pre></td>"
+				echo -e "</tr>\n<tr>\n"
+				n=0
 			fi
 
-			echo "</tr>"
-		done > $pre.html
+			n=$((n+1))
+			printf "\t<td><img src=\"%s\"/></td>\n" $dd/$ficp
+		done
 
-		[ $(wc -l $pre.html | awk '{print $1}') -le 2 ] && echo > $pre.html
-	done
+		if [ -s $dd/$pre$s.txt ]
+		then
+			echo -e "\t<td><pre>\n"
+			cat $dd/$pre$s.txt
+			echo "</pre></td>"
+		fi
 
-	echo "Adding thematic HTML files"
-	date=$(grep -E 'NUDATE *=' $xpdir/$fic | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
-	res=$(grep -E 'NUDATE *=' $xpdir/$fic | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
-	base=$(printf "%s %dh" $date $((res/3600)))
-	sed -re "s:TAG NODE:$fic:" -e "s:TAG BASE:$base:" -e "s:TAG DESC:$desc:" \
-		-e '/TAG SP/r sp.html' -e "/TAG GPGMV/r gpgmv$suf.html" \
-		-e "/TAG GPGFL/r gpgfl$suf.html" -e "/TAG GPADIAB/r gpadiab$suf.html" \
-		-e "/TAG GPSI/r gpsi$suf.html" $diags/img.html >> img.html
-done < info.txt
+		echo "</tr>"
+	done > $temp/$pre.html
 
-sed -re '/TAG IMG/r img.html' $diags/norms.html > out.html
+	[ $(wc -l $temp/$pre.html | awk '{print $1}') -le 2 ] && echo > $temp/$pre.html
+done
 
-cd $OLDPWD > /dev/null
-mv $temp/out.html $fout
+echo "Adding thematic HTML files from $temp"
+date=$(grep -E 'NUDATE *=' $fic | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
+res=$(grep -E 'NUDATE *=' $fic | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
+base=$(printf "%s %dh" $date $((res/3600)))
+sed -re "s:TAG NODE:$fic:" -e "s:TAG BASE:$base:" \
+	-e "/TAG SP/r $temp/sp.html" -e "/TAG GPGMV/r $temp/gpgmv$suf.html" \
+	-e "/TAG GPGFL/r $temp/gpgfl$suf.html" -e "/TAG GPADIAB/r $temp/gpadiab$suf.html" \
+	-e "/TAG GPSI/r $temp/gpsi$suf.html" $node/img.html > $temp/img.html
 
+sed -re "/TAG IMG/r $temp/img.html" $node/norms.html > $fout
