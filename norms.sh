@@ -217,6 +217,4 @@ base=$(printf "%s %dh" $date $((res/3600)))
 sed -re "s:TAG NODE:$fic:" -e "s:TAG BASE:$base:" \
 	-e "/TAG SP/r $temp/sp.html" -e "/TAG GPGMV/r $temp/gpgmv$suf.html" \
 	-e "/TAG GPGFL/r $temp/gpgfl$suf.html" -e "/TAG GPADIAB/r $temp/gpadiab$suf.html" \
-	-e "/TAG GPSI/r $temp/gpsi$suf.html" $node/img.html > $temp/img.html
-
-sed -re "/TAG IMG/r $temp/img.html" $node/norms.html > $fout
+	-e "/TAG GPSI/r $temp/gpsi$suf.html" $node/norms.html > $fout

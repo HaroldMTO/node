@@ -1,19 +1,17 @@
 MAKEFLAGS += --no-print-directory
 
 # ne pas mettre ~ pour P : il faut un chemin absolu
-P = $(HOME)/proc/diagnode
+P = $(HOME)/proc/node
 B = ~/bin
 
-.PHONY: build install diagnode
+.PHONY: build install node
 
 build:
 	# rien
 
 install:
 	! git status --porcelain 2>/dev/null | grep -qvE "^\?\? "
-	make diagnode
-	make $B/error.sh
-	make $B/conf.sh
+	make node
 	make $B/norms.sh
 	make $B/setup.sh
 	if git status >/dev/null 2>&1; then \
@@ -21,17 +19,9 @@ install:
 			git log -1 --oneline >> $P/version; \
 	fi
 
-diagnode:
+node:
 	mkdir -p $P
-	cp -pruv norms.R error.R procmap.R setup.html norms.html $P
-
-$B/error.sh: error.sh
-	sed -re "s:diags=.+:diags=$P:" error.sh > $B/error.sh
-	chmod a+x $B/error.sh
-
-$B/conf.sh: conf.sh
-	sed -re "s:diags=.+:diags=$P:" conf.sh > $B/conf.sh
-	chmod a+x $B/conf.sh
+	cp -pruv gpnorms.R spnorms.R procmap.R setup.html norms.html $P
 
 $B/norms.sh: norms.sh
 	sed -re "s:diags=.+:diags=$P:" norms.sh > $B/norms.sh

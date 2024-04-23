@@ -1,6 +1,6 @@
 #!/bin/sh
 
-diags=~/util/diags
+node=~/util/node
 
 set -e
 
@@ -73,11 +73,17 @@ then
 
 	if ! file -L $ftmp | grep -q text
 	then
-		echo "$fin is not a text file" >&2
+		echo "Error: $fin is not a text file" >&2
 		exit 1
 	fi
 
 	fin=$ftmp
+fi
+
+if ! grep -qE '\-+ Set up' $fin
+then
+	echo "Error: $fin is not a NODE file (no 'Set up...' content)" >&2
+	exit 1
 fi
 
 if ! grep -qi 'END OF SETUPS' $fin
@@ -99,17 +105,18 @@ then
 fi
 
 mkdir -p $png
-echo "Parse NODE file (PNG graphics in $png)"
+echo "Parse NODE file (PNG graphics in $png/)"
 
-R --slave -f $diags/procmap.R --args ficin=$fin png=$png
+R --slave -f $node/procmap.R --args ficin=$fin png=$png
 
 echo "Write HTML file $fout"
-{
+if [ -s $png/out.txt ]
+then
 	echo "<pre>"
 	grep -A 1 -iw values $png/out.txt || true
 	grep -w SL $png/out.txt || true
 	echo "</pre>"
-} > $png/map.txt
+fi > $png/map.txt
 
 [ -s $png/jo.txt ] || echo "no Jo tables" > $png/jo.txt
 
@@ -117,4 +124,4 @@ date=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
 res=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
 base=$(printf "%s %dh" $date $((res/3600)))
 sed -re "s:TAG NODE:$fin:" -e "s:TAG BASE:$base:" -e "s:TAG DIR:$png:g" \
-	-e "/TAG MAP/r $png/map.txt" -e "/TAG JO/r $png/jo.txt" $diags/setup.html > $fout
+	-e "/TAG MAP/r $png/map.txt" -e "/TAG JO/r $png/jo.txt" $node/setup.html > $fout

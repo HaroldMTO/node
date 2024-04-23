@@ -210,17 +210,17 @@ if (length(lev) == 1) {
 	if (length(gpl) > 1) {
 		con = file(sprintf("%s/%s.txt",pngd,ptype),"wt")
 		for (i in seq(along=gpl)[-1]) {
-			cat("Norm diff. tendency for patterns:\n",sprintf("'%s'",leg[(i-1):i]),"\n",
+			cat("\nNorm diff. tendency for patterns:",sprintf("'%s'",leg[(i-1):i]),"\n",
 				file=con)
 			iv = which(! is.na(dimnames(gpl[[i]])[[4]]))
 			gpdiff = gpl[[i]][,1,1,iv,drop=FALSE]-gpl[[i-1]][,1,1,iv,drop=FALSE]
 			a = apply(gpdiff,4,function(x) coef(line(x))[2])
 			s = apply(gpdiff,4,function(x) sd(residuals(line(x))))
-			cat("\n",file=con)
 			evo = rbind(tend=a,sd=s)
-			evo = format(evo,digits=3,width=9)
-			cat("field",format(dimnames(evo)[[2]],width=9),"\n",sep="\t",file=con)
-			write.table(evo,con,quote=FALSE,col.names=FALSE,sep="\t")
+			evo = format(evo,digits=3,width=12)
+			cat("field",sprintf("% 12s",dimnames(evo)[[2]]),"\n",file=con)
+			write.table(evo,con,quote=FALSE,row.names=format(dimnames(evo)[[1]],width=5),
+				col.names=FALSE)
 		}
 
 		close(con)

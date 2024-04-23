@@ -1,5 +1,4 @@
-Gnum = "-?(\\d+\\.\\d*|\\d*\\.\\d+([eE]?[-+]?\\d+)?\\>)"
-Gint = "-?[0-9]+\\>"
+library(mfnode)
 
 getvar = function(var,nd,sep="=")
 {
@@ -83,16 +82,6 @@ wavenb = function(nd)
 	nmen = as.integer(gsub("\\( *\\d+ +\\d+ +(\\d+)\\)","\\1",s))
 
 	nmen
-}
-
-intlines = function(nd)
-{
-	as.integer(unlist(regmatches(nd,gregexpr(Gint,nd))))
-}
-
-numlines = function(nd)
-{
-	as.numeric(unlist(regmatches(nd,gregexpr(Gnum,nd))))
 }
 
 specdis = function(nd)
@@ -334,7 +323,7 @@ varqc = function(nd)
 	indo = grep("^ *VAR *= *\\d+",nd)
 	iv = as.integer(sub("VAR *= *(\\d+).+","\\1",nd[indo]))
 	qc = vector(length(unique(iv)),mode="list")
-	for (i in iv) {
+	for (i in unique(iv)) {
 		ind = which(iv == i)
 		notvar = intlines(sub(".+ NOTVAR *=","",nd[indo[ind[1]]]))
 		v = numlines(gsub("\\*+","-9999.",nd[indo[ind[-1]]]))
@@ -1015,7 +1004,8 @@ if (length(grep("JOT-sname",nd)) > 0) {
 	con = file(sprintf("%s/jo.txt",cargs$png),open="w+")
 	cat("<pre>Means of Jo by codetype:\n",file=con)
 	jod[,-1] = signif(jod[,-1],5)
-	write.table(jod,file=con,quote=FALSE,row.names=FALSE,sep="\t\t")
+	write.table(format(jod,width=12,justify="right"),file=con,quote=FALSE,row.names=FALSE,
+		col.names=sprintf("% 12.12s",names(jod)))
 
 	jog = by(jot[-(1:2)],jot$Variable,colMeans)
 	jod = jog[[1]]
@@ -1024,7 +1014,8 @@ if (length(grep("JOT-sname",nd)) > 0) {
 
 	cat("\nMeans of Jo by variable:\n",file=con)
 	jod[,-1] = signif(jod[,-1],5)
-	write.table(jod,file=con,quote=FALSE,row.names=FALSE,sep="\t\t")
+	write.table(format(jod,width=12,justify="right"),file=con,quote=FALSE,row.names=FALSE,
+		col.names=sprintf("% 12.12s",names(jod)))
 	cat("</pre>\n",file=con)
 	close(con)
 }
@@ -1044,29 +1035,36 @@ if (is.null(jc)) {
 	pngoff(op)
 }
 
-cat("Values of minimization\n")
+cat("Jacobian values\n")
 ind = grep("GREPCOST - ITER",nd)
-if (length(ind) > 0) {
-	jacob = t(matrix(numlines(nd[ind]),nrow=6))
-	jac = c("Jo","Jb","Jc","Jq","Jp","JcVarBC")
+if (length(ind) > 1) {
+	jacob = t(matrix(numlines(nd[ind]),ncol=length(ind)))
+	jac = sub("GREPCOST.+SIM,(.+JCVARBC).+","\\1",nd[ind[1]])
+	jac = trimws(strsplit(jac,split=",")[[1]])
 	dimnames(jacob)[[2]] = jac
-	ritz = t(matrix(numlines(grep("ritz values",nd,value=TRUE)[-1]),nrow=2))
-	grad = numlines(grep("reduction in norm",nd,value=TRUE))
 
-	iter = seq(along=grad)-1
-	iterj = iter[c(seq(dim(jacob)[1]-1),length(iter))]
+	iter = as.integer(sub(".+JCVARBC +(\\d+) .+","\\1",nd[ind]))
+	if (iter[length(iter)] > 40) iter[length(iter)] = 40
 	pngalt(sprintf("%s/jacob.png",cargs$png))
-	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-	for (i in c(1:3,5)) {
-		plot(iterj,jacob[,i],type="o",main=jac[i],xlab="Iteration",ylab=jac[i],pch=20)
+	op = par(mfrow=c(3,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	for (i in 1:min(dim(jacob)[2],6)) {
+		plot(iter,jacob[,i],type="o",main=jac[i],xlab="Iteration",ylab=jac[i],pch=20)
 	}
 	pngoff(op)
+}
 
+cat("Ritz values and norm of gradient\n")
+ind = grep("ritz values",nd,ignore.case=TRUE)
+if (length(ind) > 2) {
+	ritz = t(matrix(numlines(nd[ind[-1]]),nrow=2))
+	grad = numlines(grep("(estimated|achieved) reduction in norm",nd,value=TRUE,ignore.case=TRUE))
 	pngalt(sprintf("%s/grad.png",cargs$png))
 	op = par(mfrow=c(3,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-	plot(ritz[,1],type="l",main="Ritz value 1",xlab="Iteration",ylab="Ritz 1")
-	plot(ritz[,2],type="l",main="Ritz value 2",xlab="Iteration",ylab="Ritz 2")
-	plot(iter,grad,type="l",main="Norm of gradient",xlab="Iteration",ylab="Gradient")
+	plot(ritz[,1],type="o",main="Ritz value 1",xlab="Iteration",ylab="Ritz 1",pch=20)
+	plot(ritz[,2],type="o",main="Ritz value 2",xlab="Iteration",ylab="Ritz 2",pch=20)
+	iter = seq(along=grad)-1
+	plot(iter,grad,type="o",main="Norm of gradient",xlab="Iteration",ylab="Gradient",
+		pch=20)
 	pngoff(op)
 }
 
