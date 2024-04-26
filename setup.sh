@@ -8,30 +8,29 @@ usage()
 {
 	echo "
 Description:
-	Print HTML output related to a few plots from setup information of any model forecast
+	Create an HTML output and a few PNG plots from setup information of any log from \
+MASTERODB
 
 Usage:
-	setup.sh FNODE [FHTML] [-o PNG] [-h]
+	setup.sh FNODE [-o HTML] [-h]
 
 Options:
-	FNODE: input NODE file (as produced by MASTERODB)
-	FHTML: HTML output file containing text and links to images related to FNODE \
+	FNODE: input NODE file (ie log file from MASTERODB)
+	HTML: HTML output file containing text and links to images related to FNODE \
 (default: setup.html)
-	PNG: local directory name (no '/') where output PNG files (+ text files) are produced
 	-h: print this help and exit normally
 
 Details:
-	Input file is a 'NODE file' as produced by MASTERODB.
-	An HTML output file is produced, containing text and images built from the NODE file. \
-Its default name is 'setup.html'.
-	Plots are placed into directory [PNG] (created if needed) aside (ie local) to the \
-HTML file. If the name of this NODE file begins with 'node', the directory is named \
+	The file name FNODE must begin with 'NODE' (or 'node') after any path part.
+	An HTML output file is produced, containing text and images built from the NODE file.
+	Plots are produced in one directory named after the NODE file, its prefix \
+'NODE'/'node' being deleted. This directory is created (if needed) aside from HTML. \
+If the name of this NODE file begins with 'node', the directory is named \
 after 'nodexxx', prefix 'node' being removed. Otherwise, the directory is created by \
-mktemp, with prefix 'setup'. Be aware that in this latter case, the directory is not \
-removed."
+mktemp, with prefix 'setup'."
 }
 
-if [ $# -eq 0 ] || echo " $*" | grep -qE '\-\w*h'
+if [ $# -eq 0 ] || echo " $*" | grep -qE '\-h\>'
 then
 	usage
 	exit
@@ -44,11 +43,21 @@ while [ $# -ne 0 ]
 do
 	case $1 in
 	-o)
-		png=$2
+		fout=$2
 		shift
 		;;
+	-*)
+		echo "Error: unknown option '$1'" >&2
+		exit 1
+		;;
 	*)
-		[ -z "$fin" ] && fin=$1 || fout=$1
+		if [ -z "$fin" ]
+		then
+			fin=$1
+		else
+			echo "Error: input file already set as '$fin', unknown option '$1'" >&2
+			exit 1
+		fi
 		;;
 	esac
 
@@ -96,23 +105,20 @@ if ! env | grep -qw R_LIBS
 then
 	export R_LIBS=~petithommeh/lib
 	echo "--> setting R_LIBS: $R_LIBS"
-elif ! echo R_LIBS | grep -qw ~petithommeh/lib
-then
+else
 	R_LIBS=$R_LIBS:~petithommeh/lib
-	echo "--> updating R_LIBS: $R_LIBS"
 fi
 
-if [ -z "$png" ]
+loc=$(dirname $fout)
+
+if echo $fin | grep -qEi '(.+/)?\<node\.?\w+'
 then
-	if echo $fin | grep -qEi '(.+/)?\<node\.?\w+'
-	then
-		png=$(echo $fin | sed -re 's:(.+/)?\<node\.?(\w+):\2:i')
-	else
-		loc=$(dirname $fin)
-		png=$(mktemp -d setupXXX)
-	fi
+	png=$loc/$(echo $fin | sed -re 's:(.+/)?\<node\.?(\w+):\2:i')
+else
+	png=$(mktemp -t $loc -d setupXXX)
 fi
 
+png=$(echo $png | sed -re 's:^\./::')
 mkdir -p $png
 echo "Parse NODE file (PNG graphics in $png/)"
 
