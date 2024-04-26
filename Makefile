@@ -24,9 +24,9 @@ node:
 	cp -pruv gpnorms.R spnorms.R procmap.R setup.html norms.html $P
 
 $B/norms.sh: norms.sh
-	sed -re "s:diags=.+:diags=$P:" norms.sh > $B/norms.sh
+	sed -re "s:node=.+:node=$P:" norms.sh > $B/norms.sh
 	chmod a+x $B/norms.sh
 
 $B/setup.sh: setup.sh
-	sed -re "s:diags=.+:diags=$P:" setup.sh > $B/setup.sh
+	sed -re "s:node=.+:node=$P:" setup.sh > $B/setup.sh
 	chmod a+x $B/setup.sh

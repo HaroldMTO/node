@@ -125,7 +125,15 @@ fi
 loc=$(dirname $fout)
 
 type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
-env | grep -qw R_LIBS || export R_LIBS=~/lib
+if ! env | grep -qw R_LIBS
+then
+	export R_LIBS=~petithommeh/lib
+	echo "--> setting R_LIBS: $R_LIBS"
+elif ! echo R_LIBS | grep -qw ~petithommeh/lib
+then
+	R_LIBS=$R_LIBS:~petithommeh/lib
+	echo "--> updating R_LIBS: $R_LIBS"
+fi
 
 fic=$(echo $fin | sed -re 's/^\s*(node\.?\w+[^ :]*) *:?/\1/i')
 ls -L $fic > /dev/null

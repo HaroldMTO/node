@@ -92,6 +92,15 @@ then
 fi
 
 type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
+if ! env | grep -qw R_LIBS
+then
+	export R_LIBS=~petithommeh/lib
+	echo "--> setting R_LIBS: $R_LIBS"
+elif ! echo R_LIBS | grep -qw ~petithommeh/lib
+then
+	R_LIBS=$R_LIBS:~petithommeh/lib
+	echo "--> updating R_LIBS: $R_LIBS"
+fi
 
 if [ -z "$png" ]
 then

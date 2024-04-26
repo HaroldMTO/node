@@ -1,11 +1,5 @@
 library(mfnode)
 
-getvar = function(var,nd,sep="=")
-{
-	re = sprintf("^ *\\<%s *%s *(%s|%s).*",var,sep,Gint,Gnum)
-	unique(as.numeric(gsub(re,"\\1",grep(re,nd,value=TRUE))))
-}
-
 getgem = function(nd)
 {
 	#ig = grep("Printings in SUGEM_NAML",nd,ignore.case=TRUE)
