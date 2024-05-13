@@ -142,11 +142,12 @@ if (length(lev) > 1) {
 		if (! hasx11) png(sprintf("%s/spnormv%d.png",pngd,i))
 
 		par(mfcol=c(nr,nc),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+
 		for (j in seq(min(nf-nj*i,nj))+nj*i) {
 			y = t(sp1[indt,,j])
 			plotvmean(y,lev,xlab=spnoms[j],main=c(tt[j],ts))
 
-			if (length(spl) == 1) next
+			if (nr == 1) next
 
 			y = sapply(spl,function(x) x[indt[2],,j],simplify="array")
 			ts2 = sprintf("t%s",istep[indt[2]])

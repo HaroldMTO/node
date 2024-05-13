@@ -49,13 +49,13 @@ found in norms from input files is focused between the given min and/or max hour
 "
 }
 
-if [ $# -eq 0 ] || echo " $*" | grep -qE '\-h\>'
+if [ $# -eq 0 ] || echo " $*" | grep -qE ' \-h\>'
 then
 	usage
 	exit
 fi
 
-norms="gmvgfladiabslb2"
+norms="gmvgfladiabslb2fp"
 fin=""
 fin2=""
 fout=""
@@ -174,7 +174,15 @@ then
 		$ropt
 fi
 
-for pre in sp gpgmv$suf gpgfl$suf gpadiab$suf gpsi$suf
+if grep -iqE "gpnorm dynfpos" $fin && echo $norms | grep -q fp
+then
+	echo "GP norms for FullPOS"
+	fpre="gpnorm dynfpos di:gpnorm dynfposlag:gpnorm endvpos z:gpnorm endvpos fp"
+	R --slave -f $node/fpnorms.R --args $fin $fin2 lev=$lev type=fp$suf \
+		fpref="gpnorm dynfpos z" fpre="$fpre" png=$dd $ropt
+fi
+
+for pre in sp gpgmv$suf gpgfl$suf gpadiab$suf gpsi$suf fp$suf
 do
 	echo "HTML files for $pre"
 	for s in "" v
@@ -182,7 +190,9 @@ do
 		echo "<tr>"
 
 		n=0
-		for ficp in $(ls -1 $dd | grep -E "${pre}norm$s[[:digit:]]+\.png")
+		# split lists in 2 so that 1...9 and 10... remain ordered
+		for ficp in $(ls -1 $dd | grep -E "${pre}norm$s[[:digit:]]\.png") \
+			$(ls -1 $dd | grep -E "${pre}norm$s[[:digit:]]{2,}\.png")
 		do
 			if [ $n -eq 2 ]
 			then
@@ -214,4 +224,5 @@ base=$(printf "%s %dh" $date $((res/3600)))
 sed -re "s:TAG NODE:$fin:" -e "s:TAG BASE:$base:" \
 	-e "/TAG SP/r $temp/sp.html" -e "/TAG GPGMV/r $temp/gpgmv$suf.html" \
 	-e "/TAG GPGFL/r $temp/gpgfl$suf.html" -e "/TAG GPADIAB/r $temp/gpadiab$suf.html" \
-	-e "/TAG GPSI/r $temp/gpsi$suf.html" $node/norms.html > $fout
+	-e "/TAG GPSI/r $temp/gpsi$suf.html" -e "/TAG FPOS/r $temp/fp$suf.html" \
+	$node/norms.html > $fout
