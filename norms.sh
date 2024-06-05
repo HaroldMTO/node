@@ -111,9 +111,13 @@ temp=$(mktemp -d -t plotXXX)
 
 trap 'rm -r $temp' 0
 
-if ! grep -qEi '^ \w+:\w+:\w+ +STEP +[0-9]+' $fin
+if ! file -L $fin | grep -qE "(ASCII|UTF-8 Unicode) text"
 then
-	echo "$fin: no 'STEP...' in $fin" >&2
+	echo "Error: $fin is not a text file" >&2
+	exit 1
+elif ! grep -qEi '^ \w+:\w+:\w+ +STEP +[0-9]+' $fin
+then
+	echo "Error: no 'STEP...' in $fin" >&2
 	exit 1
 fi
 
@@ -124,13 +128,6 @@ then
 	echo "--> setting R_LIBS: $R_LIBS"
 else
 	R_LIBS=$R_LIBS:~petithommeh/lib
-fi
-
-if ! { file -L $fin | grep -qE "(ASCII|UTF-8 Unicode) text" &&
-	grep -iqE '^ \w+:\w+:\w+ +STEP +[0-9]+' $fin; }
-then
-	echo "--> file not text nor model forecast" >&2
-	continue
 fi
 
 loc=$(dirname $fout)
@@ -182,7 +179,14 @@ then
 		fpref="gpnorm dynfpos z" fpre="$fpre" png=$dd $ropt
 fi
 
-for pre in sp gpgmv$suf gpgfl$suf gpadiab$suf gpsi$suf fp$suf
+if grep -iqE "FULL-POS SPNORMS" $fin && echo $norms | grep -q fp
+then
+	echo "SP norms for FullPOS"
+	R --slave -f $node/fpspnorms.R --args $fin $fin2 lev=$lev type=fpsp$suf \
+		fpref="full-pos spnorms" png=$dd $ropt
+fi
+
+for pre in sp gpgmv$suf gpgfl$suf gpadiab$suf gpsi$suf fp$suf fpsp$suf
 do
 	echo "HTML files for $pre"
 	for s in "" v

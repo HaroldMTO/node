@@ -154,10 +154,17 @@ abh = function(nd,nflevg)
 	ih = grep("A and B (at half levels|on half layers)",nd)
 	ind = ih+1+seq(nflevg+1)
 	snum = "-?\\d+\\.\\d+"
-	ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s)",snum,snum,snum),nd[ind])
-	alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
+	if (regexpr("JLEV +A +B +ETA +ALPHA",nd[ih+1]) > 0) {
+		re = sprintf(" *\\d+ +(%s) +(%s) +(%s) +(%s) +(%s)",snum,snum,snum,snum,snum)
+		ire = regexec(re,nd[ind])
+		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",5))
+		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
+	} else {
+		ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s)",snum,snum,snum),nd[ind])
+		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
+		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",4))
+	}
 	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
-	ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",4))
 	data.frame(Ah=ah,Bh=bh,alpha=alh)
 }
 
@@ -682,10 +689,7 @@ if (length(nfplev) == 1) {
 cat("Vertical scheme\n")
 rinte = vfe(nd,nflevg,"RINTE")
 pngalt(sprintf("%s/vfeint.png",cargs$png))
-if (is.null(rinte)) {
-	plot(1,xlab="",ylab="",pch="",xaxt="n",yaxt="n")
-	text(1,1,"no VFE array RINTE")
-} else {
+if (! is.null(rinte)) {
 	ilev = c(1,nflevg%/%2,nflevg,nflevg+1)
 	op = par(mfrow=c(1,4),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0),pch="-")
 	for (i in c(1,nflevg%/%2,nflevg)) {
@@ -706,10 +710,7 @@ pngoff(op)
 
 rderi = vfe(nd,nflevg,"RDERI")
 pngalt(sprintf("%s/vfeder.png",cargs$png))
-if (is.null(rderi)) {
-	plot(1,xlab="",ylab="",pch="",xaxt="n",yaxt="n")
-	text(1,1,"no VFE array RDERI")
-} else {
+if (! is.null(rderi)) {
 	ilev = c(1,nflevg%/%2,nflevg,nflevg+1)
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0),pch="-")
 	for (i in c(1,nflevg%/%2,nflevg)) {
@@ -725,11 +726,7 @@ pngoff(op)
 cat("Vertical SI system\n")
 si = silev(nd,nflevg)
 pngalt(sprintf("%s/sipre.png",cargs$png))
-if (is.null(si)) {
-	plot(1,xlab="",ylab="",col=0,xaxt="n",yaxt="n")
-	text(1,1,"no info on SI system")
-	pngoff()
-} else {
+if (! is.null(si)) {
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	ylim = c(nflevg,1)
 	plot(si$sivp,1:nflevg,type="o",lty=1,pch="-",main="SIVP: vert. modes (= freq.)",
@@ -745,11 +742,7 @@ if (is.null(si)) {
 cat("Spectral horizontal diffusion\n")
 hd = sihd(nd,nflevg)
 pngalt(sprintf("%s/sihd.png",cargs$png))
-if (is.null(hd)) {
-	plot(1,xlab="",ylab="",col=0,xaxt="n",yaxt="n")
-	text(1,1,"no info on SI system")
-	pngoff()
-} else {
+if (! is.null(hd)) {
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	plot(hd$pdi/100,1:nflevg,type="l",lty=1,main="PDILEV: 1+7.5*(3-log10(P))",
 		xlab="PDILEV (hPa)",ylab="Level",ylim=ylim,cex=1.5)
@@ -765,11 +758,7 @@ if (is.null(hd)) {
 cat("Spectral SI correction\n")
 cor = sicor(nd,nflevg)
 pngalt(sprintf("%s/sicor.png",cargs$png))
-if (is.null(cor)) {
-	plot(1,xlab="",ylab="",col=0,xaxt="n",yaxt="n")
-	text(1,1,"no CORDI")
-	pngoff()
-} else {
+if (! is.null(cor)) {
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	plot(cor$rcordit,1:nflevg,type="l",lty=1,main="RCORDIT (tropo)",xlab="RCORDIT",
 		ylab="Level",ylim=ylim,cex=1.5)
@@ -828,8 +817,8 @@ if (getvar("NPRINTLEV",nd) > 0) {
 	op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	pr = unlist(lapply(seq(along=sp$numpp),function(i) rep(i,each=sp$numpp[i])))
 	np = length(sp$nprocm)-1
-	plot(0:np,sp$nprocm,type="h",main=c("W-set and waves","'nprocm'"),xlab="Wave index 'jm'",
-		ylab="W-set index")
+	plot(0:np,sp$nprocm,type="h",main=c("W-set and waves","'nprocm'"),
+		xlab="Wave index 'jm'",ylab="W-set index")
 	if (any(sp$nprocm == 0)) text(np/2,max(sp$nprocm)/2,"NPROCM not fully decoded",.5,col=2)
 	plot(sp$nallms,type="h",main=c("Waves and W-set","'nallms'"),
 		xlab="W-set index (nb of waves 'numpp')",ylab="Wave index 'jm'",lwd=1.5,
@@ -862,11 +851,7 @@ cat("Vertical cubic weights (SL)\n")
 vintw = cuico(nd,nflevg)
 
 pngalt(sprintf("%s/vintw.png",cargs$png))
-if (all(is.na(vintw))) {
-	plot(1,xaxt="n",yaxt="n",xlab="",ylab="",col=0)
-	text(1,1,"no vertical cubic weights (VINTW)")
-	pngoff()
-} else {
+if (any(! is.na(vintw))) {
 	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	nl3 = nflevg-3
 	ntop = min(nl3,5)
@@ -887,11 +872,7 @@ if (all(is.na(vintw))) {
 cat("Vertical WENO coefficients\n")
 gamma = weno(nd,nflevg)
 pngalt(sprintf("%s/weno.png",cargs$png))
-if (is.null(gamma)) {
-	plot(1,xaxt="n",yaxt="n",xlab="",ylab="",col=0)
-	text(1,1,"no gamma weights (WENO)")
-	pngoff()
-} else {
+if (! is.null(gamma)) {
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 
 	for (i in 1:3) {
@@ -922,10 +903,7 @@ cat("Values from log file (nproc/nprgpns/ndglg/ndlon/ngptot/ngptotg):\n",ndim,"\
 
 s = grep("SETA=.+ LAT=.+ NSTA=",nd,value=TRUE)
 pngalt(sprintf("%s/procmap.png",cargs$png))
-if (length(s) == 0) {
-	plot(1,xaxt="n",yaxt="n",xlab="",ylab="",pch="")
-	text(1,1,"no map of MPI tasks")
-} else {
+if (length(s) > 0) {
 	sta = procmap(s)
 	s = grep("SETA=.+ LAT=.+ (D%)?NONL=",nd,value=TRUE)
 	onl = procmap(s)
@@ -1017,11 +995,7 @@ if (length(grep("JOT-sname",nd)) > 0) {
 cat("Jc DFI\n")
 jc = jcdfi(nd,nflevg)
 pngalt(sprintf("%s/jcdfi.png",cargs$png))
-if (is.null(jc)) {
-   plot(1,xaxt="n",yaxt="n",xlab="",ylab="",pch="")
-   text(1,1,"no Jc DFI")
-	pngoff()
-} else {
+if (! is.null(jc)) {
 	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	for (i in seq(dim(jc)[2])) {
 		plot(jc[,i],1:nflevg,type="l",ylab="Level",ylim=c(nflevg,1))
@@ -1040,8 +1014,8 @@ if (length(ind) > 1) {
 	iter = as.integer(sub(".+JCVARBC +(\\d+) .+","\\1",nd[ind]))
 	if (iter[length(iter)] > 40) iter[length(iter)] = 40
 	pngalt(sprintf("%s/jacob.png",cargs$png))
-	op = par(mfrow=c(3,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-	for (i in 1:min(dim(jacob)[2],6)) {
+	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	for (i in 1:min(dim(jacob)[2],4)) {
 		plot(iter,jacob[,i],type="o",main=jac[i],xlab="Iteration",ylab=jac[i],pch=20)
 	}
 	pngoff(op)
@@ -1051,13 +1025,17 @@ cat("Ritz values and norm of gradient\n")
 ind = grep("ritz values",nd,ignore.case=TRUE)
 if (length(ind) > 2) {
 	ritz = t(matrix(numlines(nd[ind[-1]]),nrow=2))
-	grad = numlines(grep("(estimated|achieved) reduction in norm",nd,value=TRUE,ignore.case=TRUE))
+	grad = numlines(grep("estimated reduction in norm",nd,value=TRUE,ignore.case=TRUE))
+	quad = numlines(grep("estimated quadratic cost",nd,value=TRUE,ignore.case=TRUE))
 	pngalt(sprintf("%s/grad.png",cargs$png))
-	op = par(mfrow=c(3,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	plot(ritz[,1],type="o",main="Ritz value 1",xlab="Iteration",ylab="Ritz 1",pch=20)
 	plot(ritz[,2],type="o",main="Ritz value 2",xlab="Iteration",ylab="Ritz 2",pch=20)
 	iter = seq(along=grad)-1
 	plot(iter,grad,type="o",main="Norm of gradient",xlab="Iteration",ylab="Gradient",
+		pch=20)
+	iter = seq(along=quad)-1
+	plot(iter,quad,type="o",main="Quadratic cost J",xlab="Iteration",ylab="Cost function",
 		pch=20)
 	pngoff(op)
 }
@@ -1065,7 +1043,7 @@ if (length(ind) > 2) {
 cat("Run-time information\n")
 nstop = getvar("NSTOP",nd)
 tstep = getvar("TSTEP",nd)
-if (length(grep("STEP +\\d+ +H=.+\\+CPU=",nd)) > 0) {
+if (nstop > 0 && length(grep("STEP +\\d+ +H=.+\\+CPU=",nd)) > 0) {
 	tt = runtime(nd)
 	nts = dim(tt)[1]
 

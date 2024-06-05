@@ -12,7 +12,12 @@ args = commandArgs(trailingOnly=TRUE)
 
 hasx11 = is.null(getarg("png",args)) && capabilities("X11")
 ask = hasx11 && interactive()
-if (! hasx11) cat("--> no X11 device, sending plots to PNG files\n")
+if (! hasx11) {
+	cat("--> no X11 device, sending plots to PNG files\n")
+} else {
+	png = dev.off = function(...) return(invisible(NULL))
+	if (interactive()) options(device.ask.default=TRUE)
+}
 
 xaxis = data.frame(unit=c(1,60,3600,86400),label=sprintf("fc time (%s)",
 	c("s","mn","h","days")),mindiff=c(0,240,14400,6*86400),freq=c(6,1,6,1))
@@ -138,8 +143,8 @@ if (length(lev) > 1) {
 	nj = nc
 
 	for (i in seq((nf-1)%/%nj+1)-1) {
-		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
-		if (! hasx11) png(sprintf("%s/spnormv%d.png",pngd,i))
+		ficpng = sprintf("%s/spnormv%d.png",pngd,i)
+		png(ficpng)
 
 		par(mfcol=c(nr,nc),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 
@@ -155,7 +160,7 @@ if (length(lev) > 1) {
 				col=seq(along=spl),legend=leg)
 		}
 
-		if (! hasx11) dev.off()
+		dev.off()
 	}
 
 	if (! is.null(grouplev)) {
@@ -230,8 +235,8 @@ if (length(lev) == 1) {
 	nr = min(1+(nf-1)%/%2,2)
 	nj = nr*nc
 	for (i in seq((nf-1)%/%nj+1)-1) {
-		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
-		if (! hasx11) png(sprintf("%s/spnorm%d.png",pngd,i))
+		ficpng = sprintf("%s/spnorm%d.png",pngd,i)
+		png(ficpng)
 
 		par(mfrow=c(nr,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 
@@ -244,5 +249,7 @@ if (length(lev) == 1) {
 			plotmean(ttime,y,titre[j],leg,tunit,xlim=xlim,xlab=xlab,ylab=spnoms[j],
 				xaxp=xaxp,scale=scal)
 		}
+
+		dev.off()
 	}
 }
