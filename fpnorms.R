@@ -48,7 +48,12 @@ args = commandArgs(trailingOnly=TRUE)
 
 hasx11 = is.null(getarg("png",args)) && capabilities("X11")
 ask = hasx11 && interactive()
-if (! hasx11) cat("--> no X11 device, sending plots to PNG files\n")
+if (! hasx11) {
+   cat("--> no X11 device, sending plots to PNG files\n")
+} else {
+   png = dev.off = function(...) return(invisible(NULL))
+   if (interactive()) options(device.ask.default=TRUE)
+}
 
 xaxis = data.frame(unit=c(1,60,3600,86400),label=sprintf("fc time (%s)",
 	c("s","mn","h","days")),mindiff=c(0,240,14400,6*86400),freq=c(6,1,6,1))
@@ -63,7 +68,6 @@ ptype = getarg("type",args)
 detail = regexpr("fp.*detail",ptype) > 0
 fpre = getarg("fpre",args)
 fpref = getarg("fpref",args)
-if (is.null(fpref)) fpref = "gpnorm dynfpos z"
 
 fnode = grep("=",args,invert=TRUE,value=TRUE)
 
@@ -105,10 +109,11 @@ tstep = getvar("TSTEP",nd)
 if (interactive()) browser()
 
 cat("Parse FP norms of type",ptype,"\n")
-fp1 = gpnorm(nd,lev1,fpref,abbrev=FALSE)
+fp1 = NULL
+if (! is.null(fpref)) fp1 = gpnorm(nd,lev1,fpref,abbrev=FALSE)
 if (is.null(fp1)) {
 	cat("--> no FP norms with gpnorm, try fpgpnorm\n")
-	fp1 = fpgpnorm(nd,lev1,fpref)
+	fp1 = fpgpnorm(nd,lev1,fpref,quiet=TRUE)
 }
 
 if (is.null(fp1)) {
@@ -217,9 +222,8 @@ if (length(lev) > 1) {
 	nj = 1
 
 	for (i in seq((nf-1)%/%nj+1)-1) {
-		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		ficpng = sprintf("%s/%snormv%d.png",pngd,ptype,i)
-		if (! hasx11) png(ficpng)
+		png(ficpng)
 
 		par(mfrow=c(nr,nc),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 
@@ -237,6 +241,8 @@ if (length(lev) > 1) {
 			plotvmnx(y[,il,,drop=FALSE],lev,xlab=fpnoms[j],main=c(tt[j],ts2),legend=leg[il],
 				lty=2,col=il)
 		}
+
+		dev.off()
 	}
 
 	if (! is.null(grouplev)) {
@@ -262,7 +268,10 @@ if (length(lev) > 1) {
 
 if (length(lev) == 1) {
 	cat("Produce time-series, level",lev,"\n")
-	if (nt == 1) stop("1 time-step only (stop)\n")
+	if (nt == 1) {
+		cat("1 time-step only, quit\n")
+		quit("no")
+	}
 
 	if (length(fpl) > 1) {
 		con = file(sprintf("%s/%s.txt",pngd,ptype),"wt")
@@ -320,9 +329,8 @@ if (length(lev) == 1) {
 	}
 
 	for (i in seq((nf-1)%/%nj+1)-1) {
-		if (ask && ! is.null(dev.list())) invisible(readline("Press enter to continue"))
 		ficpng = sprintf("%s/%snorm%d.png",pngd,ptype,i)
-		if (! hasx11) png(ficpng)
+		png(ficpng)
 
 		par(mfrow=c(nr,nc),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 
@@ -343,5 +351,7 @@ if (length(lev) == 1) {
 			plotmnx(ttime,y,titre[j],imnx=2,xlim=xlim,xlab=xlab,ylab=fpnoms[j],xaxp=xaxp)
 			plotmnx(ttime,y,titre[j],imnx=3,xlim=xlim,xlab=xlab,ylab=fpnoms[j],xaxp=xaxp)
 		}
+
+		dev.off()
 	}
 }
