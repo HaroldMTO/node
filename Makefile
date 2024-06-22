@@ -21,7 +21,7 @@ install:
 
 node:
 	mkdir -p $P
-	cp -pruv gpnorms.R spnorms.R procmap.R setup.html norms.html $P
+	cp -pruv gpnorms.R spnorms.R procmap.R runtime.R setup.html norms.html runtime.html $P
 
 $B/norms.sh: norms.sh
 	sed -re "s:node=.+:node=$P:" norms.sh > $B/norms.sh
@@ -30,3 +30,7 @@ $B/norms.sh: norms.sh
 $B/setup.sh: setup.sh
 	sed -re "s:node=.+:node=$P:" setup.sh > $B/setup.sh
 	chmod a+x $B/setup.sh
+
+$B/runtime.sh: runtime.sh
+	sed -re "s:node=.+:node=$P:" runtime.sh > $B/runtime.sh
+	chmod a+x $B/runtime.sh

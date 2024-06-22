@@ -155,7 +155,7 @@ abh = function(nd,nflevg)
 	ind = ih+1+seq(nflevg+1)
 	snum = "-?\\d+\\.\\d+"
 	if (regexpr("JLEV +A +B +ETA +ALPHA",nd[ih+1]) > 0) {
-		re = sprintf(" *\\d+ +(%s) +(%s) +(%s) +(%s) +(%s)",snum,snum,snum,snum,snum)
+		re = sprintf(" *\\d+ +(%s) +(%s) +(%s) +(%s)",snum,snum,snum,snum)
 		ire = regexec(re,nd[ind])
 		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",5))
 		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
@@ -254,9 +254,11 @@ sicor = function(nd,nflevg)
 	i1 = grep("SURCORDI",nd)
 	if (length(i1) == 0) return(NULL)
 
-	i2 = grep("Set up relaxation",nd,ignore.case=TRUE)
+	i2 = grep("Set up vertical interpolator",nd,ignore.case=TRUE)
+	if (length(i2) == 0) i2 = grep("Set up relaxation",nd,ignore.case=TRUE)
 	if (length(i2) == 0) i2 = grep("NSLDIMK *=",nd,ignore.case=TRUE)
-	ind = seq(i1+1,i2-1)
+	i2 = i2[i2 > i1]
+	ind = seq(i1+1,i2[1]-1)
 	ic = grep("\\<RCORDI",nd[ind])
 	noms = sub("^ *(RCORDI\\w+).*","\\1",nd[ind[ic]])
 	stopifnot(all(noms == sprintf("RCORDI%s",c("T","H","F"))))
