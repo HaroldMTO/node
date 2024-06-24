@@ -25,7 +25,7 @@ qcheck = function(qc)
 {
 	ra = sapply(qc,"[",,1)
 	rl = sapply(qc,"[",,2)
-	bg = sapply(qc,"[",,3:5)
+	bg = sapply(qc,"[",,3:5,simplify="array")
 
 	list(ra=ra,rl=rl,bg=bg)
 }
@@ -97,7 +97,7 @@ canawagons = function(nd)
 
 	it = grep("Type d'observations numero",nd)
 
-	llh = vector(length(i1),"list")
+	llh = vector("list",length(i1))
 
 	for (i in seq(along=i1)) {
 		cat(". step",i,"\n")
@@ -236,15 +236,15 @@ if (! is.null(qc)) {
 
 	png(sprintf("%s/varqc.png",cargs$png))
 	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-	barplot(q$raqc,names.arg=types,main="Variable 1",xlab="Obs type",ylab="RAQC")
-	barplot(q$rlqc,names.arg=types,main="Variable 1",xlab="Obs type",ylab="RLQC")
+	barplot(t(q$ra),names.arg=types,main="RAQC, variable 1",xlab="Obs type",ylab="RAQC")
+	barplot(t(q$rl),names.arg=types,main="RLQC, variable 1",xlab="Obs type",ylab="RLQC")
 	nc = dim(qc1)[2]
 	#barplot(q$raqc,names.arg=types,beside=TRUE,main="",xlab="Obs type",ylab="RBGQC(1:3)")
-	matplot(q$bg,main="Variable 1",xlab="Obs type",ylab="RBGQC(1:3)",type="o",lty=1,pch=20)
+	matplot(q$bg[,,1],main="Variable 1",xlab="Obs type",ylab="RBGQC(1:3)",type="o",lty=1,pch=20)
 	#barplot(qc1[,nc],names.arg=types,main="Variable 1",xlab="Obs type",ylab="NOTVAR")
-	ix = which.max(apply(q$bg[,1],1,max,na.rm=TRUE))
-	sstt = sprintf("max: %g (var: %d)",max(q$bg[,1],na.rm=TRUE),ix)
-	boxplot(q$bg[,1],outline=FALSE,main=c("RBGQC(1)",sstt),xlab="Variable",
+	ix = which.max(apply(q$bg[,1,,drop=FALSE],1,max,na.rm=TRUE))
+	sstt = sprintf("max: %g (var: %d)",max(q$bg[ix,1,],na.rm=TRUE),ix)
+	boxplot(q$bg[,1,],outline=FALSE,main=c("RBGQC(1)",sstt),xlab="Variable",
 		ylab="RBG among obs. types")
 	dev.off()
 }
@@ -392,6 +392,16 @@ if (! is.null(llh)) {
 	i2 = grep("Impression des diagnostics d'utilisation",nd)
 	indv = grep("^([^|]+\\|){9}",nd[1:i2])
 	indf = findInterval(indv,ind)
+	n = as.numeric(sapply(strsplit(nd[indv],"\\|"),"[",2))
+	m = as.numeric(sapply(strsplit(nd[indv],"\\|"),"[",3))
+	s = as.numeric(sapply(strsplit(nd[indv],"\\|"),"[",4))
+	df = data.frame(level=n,mean=m,"std-dev"=s)
+	rownames(df) = format(sprintf("%s (%s)",field,type)[indf],width=15)
+	con = file(sprintf("%s/canari.txt",cargs$png),open="w+")
+	cat("Level, mean and standard-deviation of fields (CANARI diag):\n",file=con)
+	cat(format(c("Statistics","Level","Mean","Std-dev."),width=15),"\n",file=con)
+	write.table(format(df,width=15),con,quote=FALSE,col.names=FALSE)
+	close(con)
 }
 
 cat("Run-time information\n")

@@ -116,17 +116,24 @@ R --slave -f $node/runtime.R --args $fin $fin2 png=$png
 
 n=0
 {
-echo "<tr>"
+echo "<table><tr>"
 for fic in $(ls $png | grep anaguess_.+.png)
 do
 	[ $((n%2)) -eq 1 ] && echo "</tr>\n<tr>"
 	echo "<td><img src='$fic'/></td>"
 	n=$((n+1))
 done
-echo "</tr>"
+echo "</tr></table>"
 } > $png/anaguess.html
 
 [ $n -eq 0 ] && echo > $png/anaguess.html
+
+if [ -s $png/canari.txt ]
+then
+	echo "<br><pre>"
+	cat $png/canari.txt
+	echo "</pre>"
+fi >> $png/anaguess.html
 
 date=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
 res=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
