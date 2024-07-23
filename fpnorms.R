@@ -48,11 +48,13 @@ args = commandArgs(trailingOnly=TRUE)
 
 hasx11 = is.null(getarg("png",args)) && capabilities("X11")
 ask = hasx11 && interactive()
-if (! hasx11) {
-   cat("--> no X11 device, sending plots to PNG files\n")
-} else {
-   png = dev.off = function(...) return(invisible(NULL))
-   if (interactive()) options(device.ask.default=TRUE)
+if (hasx11) {
+	png = dev.off = function(...) return(invisible(NULL))
+	if (interactive()) {
+		options(device.ask.default=TRUE)
+	} else {
+		cat("--> sending plots to Rplots.pdf\n")
+	}
 }
 
 xaxis = data.frame(unit=c(1,60,3600,86400),label=sprintf("fc time (%s)",
@@ -80,17 +82,22 @@ has.levels = getvar(".*NSPPR",nd) > 0
 
 grouplev = NULL
 ab = abh(nd,nflevg)
-abfp = abhfp(nd,nfp3s)
 vp00 = 101325
 etah = ab$alpha+ab$Bh
 eta = (etah[-1]+etah[-(nflevg+1)])/2
-etahfp = abfp$Ah/vp00+abfp$Bh
-etafp = (etahfp[-1]+etahfp[-(nfp3s+1)])/2
+if (is.null(nfp3s)) {
+	etafp = eta
+	nfp3s = nflevg
+} else {
+	abfp = abhfp(nd,nfp3s)
+	etahfp = abfp$Ah/vp00+abfp$Bh
+	etafp = (etahfp[-1]+etahfp[-(nfp3s+1)])/2
+}
 
-lev1 = lev
+levf = lev
 if (length(lev) > 1) {
 	grouplev = lev
-	lev1 = sapply(etafp,function(x) which.min(abs(x-eta)))
+	levf = sapply(etafp,function(x) which.min(abs(x-eta)))
 	lev = seq(nfp3s)
 } else if (lev == -1) {
 	if (! has.levels) {
@@ -98,22 +105,30 @@ if (length(lev) > 1) {
 		q("no")
 	}
 
-	lev1 = sapply(etafp,function(x) which.min(abs(x-eta)))
+	levf = sapply(etafp,function(x) which.min(abs(x-eta)))
 	lev = seq(nfp3s)
 }
 
 if (! identical(lev,0L)) stopifnot(has.levels)
 
 tstep = getvar("TSTEP",nd)
+nstop = getvar("NSTOP",nd)
 
 if (interactive()) browser()
 
 cat("Parse FP norms of type",ptype,"\n")
-fp1 = NULL
-if (! is.null(fpref)) fp1 = gpnorm(nd,lev1,fpref,abbrev=FALSE)
-if (is.null(fp1)) {
-	cat("--> no FP norms with gpnorm, try fpgpnorm\n")
-	fp1 = fpgpnorm(nd,lev1,fpref,quiet=TRUE)
+if (is.null(fpref)) {
+	# take all FP events (only possible if no 'gpnorm' present, ie mixed levels)
+	fp1 = fpgpnorm(nd,lev,quiet=TRUE)
+} else if (regexpr("dynfpos z",fpref) > 0) {
+	fp1 = gpnorm(nd,levf,fpref,abbrev=FALSE)
+} else if (regexpr("dynfpos",fpref) > 0) {
+	fp1 = fpgpnorm(nd,levf,fpref,quiet=TRUE)
+} else if (regexpr("allfpos",fpref) > 0) {
+	# special case when 'gpnorm' present (mixed levels)
+	fp1 = fpgpnorm(nd,lev,tag="gpnorm",invert=TRUE,quiet=TRUE)
+} else {
+	fp1 = fpgpnorm(nd,lev,fpref,quiet=TRUE)
 }
 
 if (is.null(fp1)) {
@@ -129,6 +144,7 @@ if (any(i0) && ! all(i0)) {
 
 step = dimnames(fp1)[[1]]
 cat(". steps:",head(step[-length(step)]),"...",step[length(step)],"\n")
+if (nstop == 0 && dim(fp1)[1] > 1) cat("--> steps are events of the job\n")
 
 ix = grep("^X",step)
 if (length(ix) == length(step)) {
@@ -142,66 +158,123 @@ if (length(ix) == length(step)) {
 
 istep = as.numeric(gsub("C(\\d+)","\\1.5",step))
 
+times = tstep*istep
+
 fpl = list(fp1)
-
 fpnoms = dimnames(fp1)[[4]]
-if (length(fnode) > 1) {
-	leg = sub("node\\.?","",fnode,ignore.case=TRUE)
-	fpre = rep(fpref,length(fnode)-1)
-} else {
-	leg = sub("gpnorm +","",c(fpref,fpre))
-}
 
-for (i in seq(along=fpre)) {
-	if (length(fnode) > 1) {
-		cat("Read file",fnode[i+1],"\n")
-		nd = readLines(fnode[i+1])
-	}
-
-	cat("Parse FP norms, pattern",fpre[i],"\n")
-	if (regexpr("dynfpos",fpre[i]) > 0) {
-		fpi = fpgpnorm(nd,lev1,fpre[i])
-	} else {
-		fpi = fpgpnorm(nd,lev,fpre[i])
-	}
-
-	if (is.null(fpi)) {
-		cat("--> no norms for pattern",fpre[i],"\n")
-		next
-	}
-
-	i0 = apply(fpi,1,function(x) all(x==0))
-	if (all(i0)) {
-		cat("--> FP all 0 for all steps, continue\n")
-		next
-	}
-
-	noms = dimnames(fpi)[[4]]
-	indv = match(fpnoms,noms)
-	nc = max(nchar(noms))
-	if (max(nchar(fpnoms)) != nc) {
-		fpnoms1 = substr(fpnoms,1,nc)
-		indv1 = match(fpnoms1,noms)
-		if (length(which(is.na(indv1))) < length(which(is.na(indv)))) {
-			indv = indv1
-			fpnoms = fpnoms1
+if (is.null(fpre) && length(fnode) == 1) {
+	leg = "FPGP"
+	cat("Select times and variables among:
+times:",times,"
+vars:",fpnoms,"\n")
+	fpsp1 = fpspnorm(nd,lev)
+	if (! is.null(fpsp1)) {
+		indt = match(times,dimnames(fpsp1)[[1]])
+		indv = match(fpnoms,dimnames(fpsp1)[[3]])
+		if (any(! is.na(indt)) && any(! is.na(indv))) {
+			leg = c(leg,"FPSP")
+			fpsp1 = fpsp1[indt,,indv,drop=FALSE]
+			fpl = c(fpl,list(fpsp1))
+		} else {
+			cat("--> FPSP times:",dimnames(fpsp1)[[1]],"\n")
+			cat("--> FPSP vars:",dimnames(fpsp1)[[3]],"\n")
 		}
 	}
 
-	stopifnot(any(! is.na(indv)))
-	iv = ! noms %in% fpnoms
-	if (any(iv)) cat("--> dropped variables:",noms[iv],"\n")
-
-	stepi = dimnames(fpi)[[1]]
-	ix = grep("^X",stepi)
-	if (length(ix) > 0) {
-		fpi = fpi[-ix,,,,drop=FALSE]
-		stepi = dimnames(fpi)[[1]]
+	sp1 = spnorm(nd,levf,abbrev=FALSE)
+	if (! is.null(sp1)) {
+		indt = match(times,dimnames(sp1)[[1]])
+		indv = match(fpnoms,dimnames(sp1)[[3]])
+		if (any(! is.na(indt)) && any(! is.na(indv))) {
+			leg = c(leg,"SP")
+			sp1 = sp1[indt,,indv,drop=FALSE]
+			fpl = c(fpl,list(sp1))
+		} else {
+			cat("--> SP times:",dimnames(sp1)[[1]],"\n")
+			cat("--> SP vars:",dimnames(sp1)[[3]],"\n")
+		}
 	}
 
-	inds = match(step,stepi)
-	stopifnot(any(! is.na(inds)))
-	fpl[[i+1]] = fpi[inds,,,indv,drop=FALSE]
+	gp1 = gpnorm(nd,levf,gpout=gpfre,abbrev=FALSE)
+	if (! is.null(gp1)) {
+		indt = match(times,dimnames(gp1)[[1]])
+		indv = match(fpnoms,dimnames(gp1)[[4]])
+		if (any(! is.na(indt)) && any(! is.na(indv))) {
+			leg = c(leg,"GFL")
+			gp1 = gp1[indt,,,indv,drop=FALSE]
+			fpl = c(fpl,list(gp1))
+		}
+	}
+
+	if (length(leg) == 1) {
+		cat("--> no mixed norms, quit\n")
+		quit("no")
+	}
+} else {
+	if (length(fnode) > 1) {
+		leg = sub("node\\.?","",fnode,ignore.case=TRUE)
+		fpre = rep(fpref,length(fnode)-1)
+	} else {
+		leg = sub("gpnorm +","",c(fpref,fpre))
+	}
+
+	for (i in seq(along=fpre)) {
+		if (length(fnode) > 1) {
+			cat("Read file",fnode[i+1],"\n")
+			nd = readLines(fnode[i+1])
+		}
+
+		cat("Parse FP norms, pattern",fpre[i],"\n")
+		if (regexpr("dynfpos z",fpre[i]) > 0) {
+			fpi = gpnorm(nd,levf,fpre[i],abbrev=FALSE)
+		} else if (regexpr("dynfpos",fpre[i]) > 0) {
+			fpi = fpgpnorm(nd,levf,fpre[i],quiet=TRUE)
+		} else if (regexpr("allfpos",fpre[i]) > 0) {
+			# special case when 'gpnorm' present (mixed levels)
+			fpi = fpgpnorm(nd,lev,tag="gpnorm",invert=TRUE,quiet=TRUE)
+		} else {
+			fpi = fpgpnorm(nd,lev,fpre[i],quiet=TRUE)
+		}
+
+		if (is.null(fpi)) {
+			cat("--> no norms for pattern",fpre[i],"\n")
+			next
+		}
+
+		i0 = apply(fpi,1,function(x) all(x==0))
+		if (all(i0)) {
+			cat("--> FP all 0 for all steps, continue\n")
+			next
+		}
+
+		noms = dimnames(fpi)[[4]]
+		indv = match(fpnoms,noms)
+		nc = max(nchar(noms))
+		if (max(nchar(fpnoms)) != nc) {
+			fpnoms1 = substr(fpnoms,1,nc)
+			indv1 = match(fpnoms1,noms)
+			if (length(which(is.na(indv1))) < length(which(is.na(indv)))) {
+				indv = indv1
+				fpnoms = fpnoms1
+			}
+		}
+
+		stopifnot(any(! is.na(indv)))
+		iv = ! noms %in% fpnoms
+		if (any(iv)) cat("--> dropped variables:",noms[iv],"\n")
+
+		stepi = dimnames(fpi)[[1]]
+		ix = grep("^X",stepi)
+		if (length(ix) > 0) {
+			fpi = fpi[-ix,,,,drop=FALSE]
+			stepi = dimnames(fpi)[[1]]
+		}
+
+		inds = match(step,stepi)
+		stopifnot(any(! is.na(inds)))
+		fpl[[i+1]] = fpi[inds,,,indv,drop=FALSE]
+	}
 }
 
 leg = leg[which(! sapply(fpl,is.null))]
@@ -209,8 +282,6 @@ fpl = fpl[! sapply(fpl,is.null)]
 
 nf = length(fpnoms)
 nt = dim(fp1)[1]
-
-times = tstep*istep
 
 if (length(lev) > 1) {
 	cat("Produce vertical profiles\n")
@@ -234,11 +305,11 @@ if (length(lev) > 1) {
 
 			if (nr == 1) next
 
-			y = sapply(fpl,function(x) x[indt[2],,,j],simplify="array")
-			y = aperm(y,c(1,3,2))
-			il = which(apply(y,2,function(x) any(! is.na(x))))
+			yn = sapply(fpl,function(x) x[indt[2],,,j],simplify="array")
+			yn = aperm(yn,c(1,3,2))
+			il = which(apply(yn,2,function(x) any(! is.na(x))))
 			ts2 = sprintf("t%d",indt[2])
-			plotvmnx(y[,il,,drop=FALSE],lev,xlab=fpnoms[j],main=c(tt[j],ts2),legend=leg[il],
+			plotvmnx(yn[,il,,drop=FALSE],lev,xlab=fpnoms[j],main=c(tt[j],ts2),legend=leg[il],
 				lty=2,col=il)
 		}
 
@@ -264,15 +335,10 @@ if (length(lev) > 1) {
 		fp1 = fpl[[1]]
 		lev = 0
 	}
-}
-
-if (length(lev) == 1) {
+} else if (length(lev) == 1 && nt == 1) {
+	cat("1 time-step only\n")
+} else {
 	cat("Produce time-series, level",lev,"\n")
-	if (nt == 1) {
-		cat("1 time-step only, quit\n")
-		quit("no")
-	}
-
 	if (length(fpl) > 1) {
 		con = file(sprintf("%s/%s.txt",pngd,ptype),"wt")
 		for (i in seq(along=fpl)[-1]) {
@@ -355,3 +421,4 @@ if (length(lev) == 1) {
 		dev.off()
 	}
 }
+

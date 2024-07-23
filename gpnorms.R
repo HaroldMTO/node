@@ -14,11 +14,13 @@ args = commandArgs(trailingOnly=TRUE)
 
 hasx11 = is.null(getarg("png",args)) && capabilities("X11")
 ask = hasx11 && interactive()
-if (! hasx11) {
-   cat("--> no X11 device, sending plots to PNG files\n")
-} else {
-   png = dev.off = function(...) return(invisible(NULL))
-   if (interactive()) options(device.ask.default=TRUE)
+if (hasx11) {
+	png = dev.off = function(...) return(invisible(NULL))
+	if (interactive()) {
+		options(device.ask.default=TRUE)
+	} else {
+		cat("--> sending plots to Rplots.pdf\n")
+	}
 }
 
 xaxis = data.frame(unit=c(1,60,3600,86400),label=sprintf("fc time (%s)",
@@ -34,7 +36,7 @@ ptype = getarg("type",args)
 detail = regexpr("gp.+detail",ptype) > 0
 gpre = getarg("gpre",args)
 gpref = getarg("gpref",args)
-if (is.null(gpref)) gpref = "NORMS AT (START|NSTEP|END) CNT4"
+leg = getarg("leg",args)
 
 fnode = grep("=",args,invert=TRUE,value=TRUE)
 
@@ -60,12 +62,19 @@ if (length(lev) > 1) {
 if (! identical(lev,0L)) stopifnot(has.levels)
 
 tstep = getvar("TSTEP",nd)
+nstop = getvar("NSTOP",nd)
 
 if (interactive()) browser()
 
 cat("Parse GP norms of type",ptype,"\n")
-if (regexpr("gpgfl",ptype) > 0) {
-	gp1 = gpnorm(nd,lev,gpout=gpfre)
+if (is.null(gpref)) {
+	gpref = "NORMS AT (START|NSTEP|END) CNT4"
+	ind = grep(gpref,nd)
+	if (length(ind) == 0) gpref = ""
+}
+
+if (regexpr("gfl",ptype) > 0) {
+	gp1 = gpnorm(nd,lev,gpref,gpout=gpfre)
 } else {
 	gp1 = gpnorm(nd,lev,gpref,gpfre)
 }
@@ -83,6 +92,7 @@ if (any(i0) && ! all(i0)) {
 
 step = dimnames(gp1)[[1]]
 cat(". steps:",head(step[-length(step)]),"...",step[length(step)],"\n")
+if (nstop == 0 && dim(gp1)[1] > 1) cat("--> steps are events of the job\n")
 
 ix = grep("^X",step)
 if (length(ix) == length(step)) {
@@ -95,57 +105,84 @@ if (length(ix) == length(step)) {
 }
 
 istep = as.numeric(gsub("C(\\d+)","\\1.5",step))
+times = tstep*istep
 
 gpl = list(gp1)
 
 gpnoms = dimnames(gp1)[[4]]
-if (length(fnode) > 1) {
-	leg = sub("node\\.?","",fnode,ignore.case=TRUE)
-	gpre = rep(gpref,length(fnode)-1)
+
+if (is.null(gpre) && length(fnode) == 1) {
+	leg = "GP"
+	cat("Select times and variables among:
+times:",times,"
+vars:",gpnoms,"\n")
+	sp1 = spnorm(nd,lev,tag="",abbrev=FALSE)
+	if (! is.null(sp1)) {
+		indt = match(times,dimnames(sp1)[[1]])
+		indv = match(gpnoms,dimnames(sp1)[[3]])
+		if (any(! is.na(indt)) && any(! is.na(indv))) {
+			leg = c(leg,"SP")
+			sp1 = sp1[indt,,indv,drop=FALSE]
+			gpl = c(gpl,list(sp1))
+		} else {
+			cat("--> SP times:",dimnames(sp1)[[1]],"\n")
+			cat("--> SP vars:",dimnames(sp1)[[3]],"\n")
+		}
+	}
+
+	if (length(leg) == 1) {
+		cat("--> no mixed norms, quit\n")
+		quit("no")
+	}
 } else {
-	leg = c("t0",sub("gpnorm +","",gpre))
-}
-
-for (i in seq(along=gpre)) {
 	if (length(fnode) > 1) {
-		cat("Read file",fnode[i+1],"\n")
-		nd = readLines(fnode[i+1])
+		if (is.null(leg)) leg = sub(".*node\\.?","",fnode,ignore.case=TRUE)
+		gpre = rep(gpref,length(fnode)-1)
+	} else if (is.null(leg)) {
+		leg = c("t0",sub("gpnorm +","",gpre))
 	}
 
-	cat("Parse GP norms, pattern",gpre[i],"\n")
-	if (regexpr("gpgfl",ptype) > 0) {
-		gpi = gpnorm(nd,lev,gpre[i],gpout=gpfre)
-	} else {
-		gpi = gpnorm(nd,lev,gpre[i],gpfre)
-	}
+	for (i in seq(along=gpre)) {
+		if (length(fnode) > 1) {
+			cat("Read file",fnode[i+1],"\n")
+			nd = readLines(fnode[i+1])
+		}
 
-	if (is.null(gpi)) {
-		cat("--> no norms for pattern",gpre[i],"\n")
-		next
-	}
+		cat("Parse GP norms, pattern",gpre[i],"\n")
+		if (regexpr("gpgfl",ptype) > 0) {
+			gpi = gpnorm(nd,lev,gpre[i],gpout=gpfre)
+		} else {
+			gpi = gpnorm(nd,lev,gpre[i],gpfre)
+		}
 
-	i0 = apply(gpi,1,function(x) all(x==0))
-	if (all(i0)) {
-		cat("--> GFL all 0 for all steps, continue\n")
-		next
-	} else if (any(i0)) {
-		cat("--> GFL all 0 for some steps, removed\n")
-		gpi = gpi[-which(i0),,,,drop=FALSE]
-	}
+		if (is.null(gpi)) {
+			cat("--> no norms for pattern",gpre[i],"\n")
+			next
+		}
 
-	indv = match(gpnoms,dimnames(gpi)[[4]])
-	stopifnot(any(! is.na(indv)))
+		i0 = apply(gpi,1,function(x) all(x==0))
+		if (all(i0)) {
+			cat("--> GFL all 0 for all steps, continue\n")
+			next
+		} else if (any(i0)) {
+			cat("--> GFL all 0 for some steps, removed\n")
+			gpi = gpi[-which(i0),,,,drop=FALSE]
+		}
 
-	stepi = dimnames(gpi)[[1]]
-	ix = grep("^X",stepi)
-	if (length(ix) > 0) {
-		gpi = gpi[-ix,,,,drop=FALSE]
+		indv = match(gpnoms,dimnames(gpi)[[4]])
+		stopifnot(any(! is.na(indv)))
+
 		stepi = dimnames(gpi)[[1]]
-	}
+		ix = grep("^X",stepi)
+		if (length(ix) > 0) {
+			gpi = gpi[-ix,,,,drop=FALSE]
+			stepi = dimnames(gpi)[[1]]
+		}
 
-	inds = match(step,stepi)
-	stopifnot(any(! is.na(inds)))
-	gpl[[i+1]] = gpi[inds,,,indv,drop=FALSE]
+		inds = match(step,stepi)
+		stopifnot(any(! is.na(inds)))
+		gpl[[i+1]] = gpi[inds,,,indv,drop=FALSE]
+	}
 }
 
 leg = leg[which(! sapply(gpl,is.null))]
@@ -153,8 +190,6 @@ gpl = gpl[! sapply(gpl,is.null)]
 
 nf = length(gpnoms)
 nt = dim(gp1)[1]
-
-times = tstep*istep
 
 if (length(lev) > 1) {
 	cat("Produce vertical profiles\n")

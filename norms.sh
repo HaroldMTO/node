@@ -62,6 +62,8 @@ fout=""
 suf=""
 lev=0
 ropt=""
+spref=""
+gpref=""
 
 while [ $# -ne 0 ]
 do
@@ -72,6 +74,14 @@ do
 		;;
 	-lev)
 		lev=$2
+		shift
+		;;
+	-spref)
+		spref="spref=$2"
+		shift
+		;;
+	-gpref)
+		gpref="gpref=$2"
 		shift
 		;;
 	-detail) suf=detail;;
@@ -117,8 +127,8 @@ then
 	exit 1
 elif ! grep -qEi '^ \w+:\w+:\w+ +STEP +[0-9]+' $fin
 then
-	echo "Error: no 'STEP...' in $fin" >&2
-	exit 1
+	echo "Warning: no 'STEP...' in $fin" >&2
+	#exit 1
 fi
 
 type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
@@ -138,14 +148,20 @@ echo "--> output sent to $dd"
 grep -q 'END CNT0' $fin || echo "Warning: no 'END CNT0', program may crash" >&2
 
 echo "SP norms for SPEC"
-R --slave -f $node/spnorms.R --args $fin $fin2 lev=$lev \
+R --slave -f $node/spnorms.R --args $fin $fin2 lev=$lev $spref \
 	spre="spnorm t1 *tr(ansdir)?:spnorm t1si:spnorm t1 spcm" png=$dd $ropt
 
 if echo $norms | grep -q gfl
 then
 	echo "GP norms for GFL"
-	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev type=gpgfl$suf \
+	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev $gpref type=gpgfl$suf \
 		gpre="gpnorm gflt1 (call_)?sl$:gpnorm gflt1 slmf:gpnorm gflt1 (cpg)?lag:gpnorm gfl tstep" png=$dd $ropt
+
+	if [ -z "$fin2" ]
+	then
+		echo "GP norms for GFL+SPEC"
+		R --slave -f $node/gpnorms.R --args $fin lev=$lev type=gflspec$suf png=$dd $ropt
+	fi
 fi
 
 if grep -iqE "gpnorm gmvt0" $fin && echo $norms | grep -q gmv
@@ -171,22 +187,39 @@ then
 		$ropt
 fi
 
-if grep -iqE "gpnorm dynfpos" $fin && echo $norms | grep -q fp
+if grep -iqE "FULL-POS GPNORMS" $fin && echo $norms | grep -q fp
 then
-	echo "GP norms for FullPOS"
-	fpre="gpnorm dynfpos di:gpnorm dynfposlag:gpnorm endvpos z:gpnorm endvpos fp"
-	R --slave -f $node/fpnorms.R --args $fin $fin2 lev=$lev type=fp$suf \
-		fpref="gpnorm dynfpos z" fpre="$fpre" png=$dd $ropt
+	if grep -iqE "gpnorm dynfpos" $fin
+	then
+		echo "GP norms for FullPOS"
+		fpre="gpnorm dynfpos di:gpnorm dynfposlag:gpnorm endvpos z:gpnorm endvpos fp:allfpos"
+		R --slave -f $node/fpnorms.R --args $fin $fin2 lev=$lev type=fp$suf \
+			fpref="gpnorm dynfpos z" fpre="$fpre" png=$dd $ropt
+	fi
+
+	if [ -z "$fin2" ]
+	then
+		echo "GP norms for FullPOS+SPEC+GFL"
+		R --slave -f $node/fpnorms.R --args $fin lev=$lev type=fpgp$suf fpref="allfpos" \
+			png=$dd $ropt
+	fi
 fi
 
 if grep -iqE "FULL-POS SPNORMS" $fin && echo $norms | grep -q fp
 then
 	echo "SP norms for FullPOS"
-	R --slave -f $node/fpspnorms.R --args $fin $fin2 lev=$lev type=fpsp$suf \
-		fpref="full-pos spnorms" png=$dd $ropt
+	R --slave -f $node/fpspnorms.R --args $fin $fin2 lev=$lev type=fpsp \
+		fpref="full-pos spnorms" fpre="xxxyyyzzz" png=$dd $ropt
+
+	if [ -z "$fin2" ]
+	then
+		echo "SP norms for FullPOS+SPEC"
+		R --slave -f $node/fpspnorms.R --args $fin lev=$lev type=fpspec png=$dd $ropt
+	fi
 fi
 
-for pre in sp gpgmv$suf gpgfl$suf gpadiab$suf gpsi$suf fp$suf fpsp$suf
+for pre in sp gpgmv$suf gpgfl$suf gpadiab$suf gpsi$suf fp$suf fpsp \
+	gflspec$suf fpgp$suf fpspec
 do
 	echo "HTML files for $pre"
 	for s in "" v
@@ -195,8 +228,8 @@ do
 
 		n=0
 		# split lists in 2 so that 1...9 and 10... remain ordered
-		for ficp in $(ls -1 $dd | grep -E "${pre}norm$s[[:digit:]]\.png") \
-			$(ls -1 $dd | grep -E "${pre}norm$s[[:digit:]]{2,}\.png")
+		for ficp in $(ls -1 $dd | grep -E "^${pre}norm$s[[:digit:]]\.png") \
+			$(ls -1 $dd | grep -E "^${pre}norm$s[[:digit:]]{2,}\.png")
 		do
 			if [ $n -eq 2 ]
 			then
@@ -226,7 +259,9 @@ date=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
 res=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
 base=$(printf "%s %dh" $date $((res/3600)))
 sed -re "s:TAG NODE:$fin:" -e "s:TAG BASE:$base:" \
-	-e "/TAG SP/r $temp/sp.html" -e "/TAG GPGMV/r $temp/gpgmv$suf.html" \
+	-e "/TAG SP\>/r $temp/sp.html" -e "/TAG GPGMV/r $temp/gpgmv$suf.html" \
 	-e "/TAG GPGFL/r $temp/gpgfl$suf.html" -e "/TAG GPADIAB/r $temp/gpadiab$suf.html" \
-	-e "/TAG GPSI/r $temp/gpsi$suf.html" -e "/TAG FPOS/r $temp/fp$suf.html" \
+	-e "/TAG GPSI/r $temp/gpsi$suf.html" -e "/TAG SPFPOS/r $temp/fpsp.html" \
+	-e "/TAG FPOS/r $temp/fp$suf.html" -e "/TAG GFLSPEC/r $temp/gflspec$suf.html" \
+	-e "/TAG SPECFPOS/r $temp/fpspec.html" -e "/TAG GPFPOS/r $temp/fpgp$suf.html" \
 	$node/norms.html > $fout

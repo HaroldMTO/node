@@ -12,11 +12,13 @@ args = commandArgs(trailingOnly=TRUE)
 
 hasx11 = is.null(getarg("png",args)) && capabilities("X11")
 ask = hasx11 && interactive()
-if (! hasx11) {
-	cat("--> no X11 device, sending plots to PNG files\n")
-} else {
+if (hasx11) {
 	png = dev.off = function(...) return(invisible(NULL))
-	if (interactive()) options(device.ask.default=TRUE)
+	if (interactive()) {
+		options(device.ask.default=TRUE)
+	} else {
+		cat("--> sending plots to Rplots.pdf\n")
+	}
 }
 
 xaxis = data.frame(unit=c(1,60,3600,86400),label=sprintf("fc time (%s)",
@@ -30,7 +32,7 @@ hmin = as.numeric(getarg("hmin",args))
 hmax = as.numeric(getarg("hmax",args))
 spre = getarg("spre",args)
 spref = getarg("spref",args)
-if (is.null(spref)) spref = "NORMS AT (START|NSTEP|END) CNT4"
+leg = getarg("leg",args)
 
 fnode = grep("=",args,invert=TRUE,value=TRUE)
 
@@ -56,10 +58,17 @@ if (length(lev) > 1) {
 if (! identical(lev,0L)) stopifnot(has.levels)
 
 tstep = getvar("TSTEP",nd)
+nstop = getvar("NSTOP",nd)
 
 if (interactive()) browser()
 
 cat("Parse spectral norms\n")
+if (is.null(spref)) {
+	spref = "NORMS AT (START|NSTEP|END) CNT4"
+	ind = grep(spref,nd)
+	if (length(ind) == 0) spref = ""
+}
+
 sp1 = spnorm(nd,lev,spref)
 if (is.null(sp1)) {
 	cat("--> no SP norms\n")
@@ -79,13 +88,14 @@ if (length(ix) == length(step)) {
 
 istep = as.numeric(gsub("C(\\d+)","\\1.5",step))
 cat(". steps:",head(step[-length(step)]),"...",step[length(step)],"\n")
+if (nstop == 0 && dim(sp1)[1] > 1) cat("--> steps are events of the job\n")
 
 spnoms = dimnames(sp1)[[3]]
 
 if (length(fnode) > 1) {
-	leg = sub("node\\.?","",fnode,ignore.case=TRUE)
+	if (is.null(leg)) leg = sub(".*node\\.?","",fnode,ignore.case=TRUE)
 	spre = rep(spref,length(fnode)-1)
-} else {
+} else if (is.null(leg)) {
 	leg = c("t0",sub("spnorm +","",spre))
 }
 
@@ -150,14 +160,14 @@ if (length(lev) > 1) {
 
 		for (j in seq(min(nf-nj*i,nj))+nj*i) {
 			y = t(sp1[indt,,j])
-			plotvmean(y,lev,xlab=spnoms[j],main=c(tt[j],ts))
+			plotvmean(y,lev,type="o",pch=".",cex=1.1,xlab=spnoms[j],main=c(tt[j],ts))
 
 			if (nr == 1) next
 
 			y = sapply(spl,function(x) x[indt[2],,j],simplify="array")
 			ts2 = sprintf("t%s",istep[indt[2]])
-			plotvmean(y,lev,xlab=spnoms[j],main=c(tt[j],ts2),lty=c(1,2,2),
-				col=seq(along=spl),legend=leg)
+			plotvmean(y,lev,type="o",pch=".",cex=1.1,xlab=spnoms[j],main=c(tt[j],ts2),
+				lty=c(1,2,2),col=seq(along=spl),legend=leg)
 		}
 
 		dev.off()
