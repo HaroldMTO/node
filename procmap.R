@@ -255,9 +255,9 @@ sicor = function(nd,nflevg)
 	if (length(i1) == 0) return(NULL)
 
 	i2 = grep("Set up vertical interpolator",nd,ignore.case=TRUE)
+	i2 = i2[i2 > i1]
 	if (length(i2) == 0) i2 = grep("Set up relaxation",nd,ignore.case=TRUE)
 	if (length(i2) == 0) i2 = grep("NSLDIMK *=",nd,ignore.case=TRUE)
-	i2 = i2[i2 > i1]
 	ind = seq(i1+1,i2[1]-1)
 	ic = grep("\\<RCORDI",nd[ind])
 	noms = sub("^ *(RCORDI\\w+).*","\\1",nd[ind[ic]])
