@@ -97,15 +97,14 @@ canawagons = function(nd)
 
 	it = grep("Type d'observations numero",nd)
 
-	llh = vector("list",length(i1))
+	# list of histograms per obs. type (there should be 2 types)
+	lht = vector("list",2)
 
 	for (i in seq(along=i1)) {
 		cat(". step",i,"\n")
 		iit = it[i1[i] < it & it < i2[i]]
 		ind = seq(i1[i],i2[i])
 		indi = grep("wagons rejetes",nd[ind])
-
-		lh = lapply(indi,function(j) readhist(nd[ind[(j-5):(j-2)]]))
 
 		lh = list()
 		n = 0
@@ -115,18 +114,32 @@ canawagons = function(nd)
 
 			k = which(iit < ind[j])
 			ik = iit[k[length(k)]]
-			param = gsub("^ +| +$","",nd[ind[j]-7])
-			attr(m,"param") = sub(" +metres?","m",param)
 			attr(m,"type") = as.integer(sub("Type d'observations numero","",nd[ik]))
+			param = gsub("^ +| +$","",nd[ind[j]-7])
+			attr(m,"param") = param
 			n = n+1
 			lh[[n]] = m
-			names(lh)[n] = param
+			names(lh)[n] = sub(" +metres?","m",param)
 		}
 
-		llh[[i]] = lh
+		types = as.integer(sub("Type d'observations numero","",nd[iit]))
+		if (i == 1) {
+			type1 = types
+		} else {
+			stopifnot(identical(types,type1))
+		}
+
+		# in lht, reverse types (j) and occurrences (i)
+		for (j in seq(along=types)) {
+			mh = simplify2array(lh[sapply(lh,attr,"type") == types[j]])
+			if (i == 1) lht[[j]] = list()
+			lht[[j]][[i]] = mh
+		}
+
+		if (i == 1) names(lht) = types
 	}
 
-	llh
+	lh = lapply(lht,simplify2array)
 }
 
 jacobian = function(nd)
@@ -197,12 +210,6 @@ runtime = function(nd)
 	rt
 }
 
-readhist = function(nd)
-{
-	l = strsplit(sub("^ +","",nd),split=" +")
-	m = sapply(l,as.numeric)
-}
-
 args = commandArgs(trailingOnly=TRUE)
 largs = strsplit(args,split="=")
 cargs = lapply(largs,function(x) unlist(strsplit(x[-1],split=":")))
@@ -222,8 +229,10 @@ nd = readLines(fnode[1])
 if (length(fnode) > 1) {
 	library(mfnode)
 	nds = lapply(fnode[-1],readLines)
-	noms = gsub(".*node","",fnode,ignore.case=TRUE)
+	leg = gsub(".*node","",fnode,ignore.case=TRUE)
 }
+
+if ("leg" %in% names(cargs)) leg = cargs$leg
 
 nflevg = getvar("NFLEVG",nd)
 
@@ -235,12 +244,13 @@ if (! is.null(qc)) {
 	q = qcheck(qc)
 
 	png(sprintf("%s/varqc.png",cargs$png))
-	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	barplot(t(q$ra),names.arg=types,main="RAQC, variable 1",xlab="Obs type",ylab="RAQC")
 	barplot(t(q$rl),names.arg=types,main="RLQC, variable 1",xlab="Obs type",ylab="RLQC")
 	nc = dim(qc1)[2]
 	#barplot(q$raqc,names.arg=types,beside=TRUE,main="",xlab="Obs type",ylab="RBGQC(1:3)")
-	matplot(q$bg[,,1],main="Variable 1",xlab="Obs type",ylab="RBGQC(1:3)",type="o",lty=1,pch=20)
+	matplot(q$bg[,,1],main="Variable 1",xlab="Obs type",ylab="RBGQC(1:3)",type="o",lty=1,
+		pch=20)
 	#barplot(qc1[,nc],names.arg=types,main="Variable 1",xlab="Obs type",ylab="NOTVAR")
 	ix = which.max(apply(q$bg[,1,,drop=FALSE],1,max,na.rm=TRUE))
 	sstt = sprintf("max: %g (var: %d)",max(q$bg[ix,1,],na.rm=TRUE),ix)
@@ -283,8 +293,8 @@ if (! is.null(jc)) {
 	if (length(fnode) > 1) {
 		cols = seq(dim(jcs)[2])
 		for (i in ic) {
-			plotvmean(jcs[,i,],1:nflevg,main="Jc after DFI",col=cols,lty=1,xlab="Jc",ylab="Level",
-				legend=noms)
+			plotvmean(jcs[,i,],1:nflevg,main="Jc after DFI",col=cols,lty=1,xlab="Jc",
+				ylab="Level",legend=leg)
 		}
 	} else {
 		for (i in ic) {
@@ -308,14 +318,17 @@ if (! is.null(jacob)) {
 	jac = dimnames(jacob)[[2]]
 
 	png(sprintf("%s/jacob.png",cargs$png))
-	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0),pch=20)
+
 	if (length(fnode) > 1) {
 		for (i in 1:min(dim(jacob)[2],4)) {
-			plotmean(iter,jacobs[,i,],jac[i],noms,xlab="Iteration",ylab=jac[i],lty=1,pch=20)
+			m = matrix(jacobs[,i,],nrow=length(iter))
+			matplot(iter,m,type="o",main=jac[i],xlab="Iteration",ylab=jac[i],lty=1)
+			legend("topleft",leg,lty=1,pch=20,col=seq(along=leg))
 		}
 	} else {
 		for (i in 1:min(dim(jacob)[2],4)) {
-			plot(iter,jacob[,i],type="o",main=jac[i],xlab="Iteration",ylab=jac[i],pch=20)
+			plot(iter,jacob[,i],type="o",main=jac[i],xlab="Iteration",ylab=jac[i])
 		}
 	}
 
@@ -341,45 +354,57 @@ if (! is.null(ritz)) {
 	iterg = seq(along=cost$grad)-1
 	iterq = seq(along=cost$quad)-1
 
-	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0),pch=20)
 	if (length(fnode) > 1) {
-		plotmean(iter,rits[,1,],noms,main="Ritz value 1",xlab=xlab,ylab="Ritz 1",pch=20)
-		plotmean(iter,rits[,2,],noms,main="Ritz value 2",xlab=xlab,ylab="Ritz 2",pch=20)
-		plotmean(iterg,grads,noms,main="Norm of gradient",xlab=xlab,ylab="Gradient",pch=20)
-		plotmean(iterq,quads,noms,main="Quadratic cost J",xlab=xlab,ylab="Cost function",
-			pch=20)
+		plotmean(iter,rits[,1,],leg,main="Ritz value 1",xlab=xlab,ylab="Ritz 1")
+		plotmean(iter,rits[,2,],leg,main="Ritz value 2",xlab=xlab,ylab="Ritz 2")
+		plotmean(iterg,grads,leg,main="Norm of gradient",xlab=xlab,ylab="Gradient")
+		plotmean(iterq,quads,leg,main="Quadratic cost J",xlab=xlab,ylab="Cost function")
 	} else {
-		plot(iter,ritz[,1],type="o",main="Ritz value 1",xlab=xlab,ylab="Ritz 1",pch=20)
-		plot(iter,ritz[,2],type="o",main="Ritz value 2",xlab=xlab,ylab="Ritz 2",pch=20)
-		plot(iterg,cost$grad,type="o",main="Norm of gradient",xlab=xlab,ylab="Gradient",
-			pch=20)
+		plot(iter,ritz[,1],type="o",main="Ritz value 1",xlab=xlab,ylab="Ritz 1")
+		plot(iter,ritz[,2],type="o",main="Ritz value 2",xlab=xlab,ylab="Ritz 2")
+		plot(iterg,cost$grad,type="o",main="Norm of gradient",xlab=xlab,ylab="Gradient")
 		plot(iterq,cost$quad,type="o",main="Quadratic cost J",xlab=xlab,
-			ylab="Cost function",pch=20)
+			ylab="Cost function")
 	}
 
 	dev.off()
 }
 
 cat("CANARI statistics\n")
-llh = canawagons(nd)
-if (! is.null(llh)) {
-	for (i in seq(along=llh)) {
-		lh = llh[[i]]
-		types = sapply(lh,attr,"type")
+lh = canawagons(nd)
+if (! is.null(lh)) {
+	types = names(lh)
+	if (length(fnode) > 1) {
+		lhs = lapply(nds,canawagons)
+		stopifnot(all(sapply(lhs,names) == types))
+	}
 
-		cat(". types:",unique(types),"\n")
-		for (t in unique(types)) {
-			ficpng = sprintf("%s/residu%d_%s.png",cargs$png,i,t)
+	for (i in seq(along=lh)) {
+		h = lh[[i]]
+		if (length(fnode) > 1) stopifnot(all(sapply(lhs,function(x) all(dim(x) == dim(h)))))
+		vars = dimnames(h)[[3]]
+
+		cat(". type:",types[i],"\n")
+		cat(". vars:",vars,"\n")
+		for (j in seq(dim(h)[4])) {
+			ficpng = sprintf("%s/residu%d_%s.png",cargs$png,j,types[i])
 			png(ficpng)
 
-			indt = which(types == t)
-			nr = min(3,length(indt))
-			nc = (length(indt)-1)%/%nr+1
+			nr = min(3,length(vars))
+			nc = (length(vars)-1)%/%nr+1
 			par(mfrow=c(nr,nc),mgp=c(2,1,0))
 
-			for (h in lh[indt]) {
-				tt = c(attr(h,"param"),sprintf("type: %s",attr(h,"type")))
-				plot(h[,1],h[,2],type="s",main=tt,xlab="Residual",ylab="Frequency")
+			for (k in seq(along=vars)) {
+				hi = h[,,k,j]
+				tt = c(vars[k],sprintf("type: %s",types[i]))
+				plot(hi[,1],hi[,2],type="s",main=tt,xlab="Residual",ylab="Frequency")
+				if (length(fnode) > 1) {
+					for (l in seq(along=lhs)) {
+						hs = lhs[[l]][[i]][,,k,j]
+						lines(hs[,1],hs[,2],type="s",col=l+1)
+					}
+				}
 			}
 
 			dev.off()
@@ -417,30 +442,33 @@ if (length(grep("STEP +\\d+ +H=.+\\+CPU=",nd)) > 0) {
 	tt = sprintf("setup+step0, forecast, total: %gs, %gs, %gs",t0,tint,total)
 	cat(tt,"\n")
 
-	if (length(fnode) > 1) {
-		rts = lapply(nds,runtime)
-		rts = c(list(rt),rts)
-		rts = sapply(rts,function(rt) sapply(rt,as.numeric,simplify="array"),simplify="array")
-	}
+	if (nts > 1) {
+		if (length(fnode) > 1) {
+			rts = lapply(nds,runtime)
+			art = function(rt) sapply(rt,as.numeric,simplify="array")
+			rts = sapply(c(list(rt),rts),art,simplify="array")
+		}
 
-	pas = c(1,2,3,5,6,10,15,20,40,50)
-	nt = c(0,200,400,600,1200,2000,3000,4000,8000,10000)
-	it = findInterval(nts,nt)
+		pas = c(1,2,3,5,6,10,15,20,40,50)
+		nt = c(0,200,400,600,1200,2000,3000,4000,8000,10000)
+		it = findInterval(nts,nt)
 
-	png(sprintf("%s/runtime.png",cargs$png))
-	op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-	its = seq(1,nts,by=pas[it])
-	if (length(fnode) > 1) {
-		matplot(its-1,rts[its,2,],type="h",lty=1,main=c("Wall-time",tt),xlab="Time-step",
-			ylab="Time (s)")
-		legend("topleft",noms,lty=1)
-		matplot(its-1,rts[its,3,],type="h",lty=1,main="CPU-time",xlab="Time-step",
-			ylab="Time (s)")
-		legend("topleft",noms,lty=1)
-	} else {
-		plot(its-1,rt$dwall[its],type="h",main=c("Wall-time",tt),xlab="Time-step",
-			ylab="Time (s)")
-		plot(its-1,rt$cpu[its],type="h",main="CPU-time",xlab="Time-step",ylab="Time (s)")
+		png(sprintf("%s/runtime.png",cargs$png))
+		op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+		its = seq(1,nts,by=pas[it])
+		if (length(fnode) > 1) {
+			matplot(its-1,rts[its,2,],type="h",lty=1,main=c("Wall-time",tt),xlab="Time-step",
+				ylab="Time (s)")
+			legend("topleft",leg,lty=1)
+			matplot(its-1,rts[its,3,],type="h",lty=1,main="CPU-time",xlab="Time-step",
+				ylab="Time (s)")
+			legend("topleft",leg,lty=1)
+		} else {
+			plot(its-1,rt$dwall[its],type="h",main=c("Wall-time",tt),xlab="Time-step",
+				ylab="Time (s)")
+			plot(its-1,rt$cpu[its],type="h",main="CPU-time",xlab="Time-step",ylab="Time (s)")
+		}
+
+		dev.off()
 	}
-	dev.off()
 }
