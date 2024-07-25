@@ -8,40 +8,17 @@ getarg = function(x,args)
 	strsplit(sub(sprintf("\\<%s=",x),"",args[ind]),split=":")[[1]]
 }
 
-abh = function(nd,nflevg)
+augmentlev = function(fp,nlev,ind)
 {
-	ih = grep("A and B (at half levels|on half layers)",nd)
-	ind = ih+1+seq(nflevg+1)
-	snum = "-?\\d+\\.\\d+"
-	if (regexpr("JLEV +A +B +ETA +ALPHA",nd[ih+1]) > 0) {
-		# take only 4 values (DELB is not present at level 0)
-		re = sprintf(" *\\d+ +(%s) +(%s) +(%s) +(%s)",snum,snum,snum,snum)
-		ire = regexec(re,nd[ind])
-		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",5))
-		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
-	} else {
-		ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s)",snum,snum,snum),nd[ind])
-		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
-		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",4))
-	}
+	stopifnot(all(ind %in% seq(nlev)))
 
-	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
-	data.frame(Ah=ah,Bh=bh,alpha=alh)
-}
+	if (dim(fp)[2] == nlev) return(fp)
 
-abhfp = function(nd,nfplev)
-{
-	ih = grep("Set up F-post processing, vertical geometry",nd)
-	ind = grep("FPVALH.+FPVBH",nd)
-	ind = ind[ind > ih]
-	stopifnot(length(ind) == nfplev+1)
+	fpn = array(dim=c(dim(fp)[1],nlev,dim(fp)[-(1:2)]))
+	dimnames(fpn) = c(dimnames(fp)[1],list(seq(nlev)),dimnames(fp)[-(1:2)])
+	fpn[,ind,,] = fp
 
-	snum = "-?\\d+\\.\\d+"
-	ire = regexec(sprintf(" *FPVALH\\(( *\\d+|\\*)+\\) *= *(%s) +FPVBH\\(( *\\d+|\\*+)\\) *= *(%s)",
-		snum,snum),nd[ind])
-	ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
-	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",5))
-	data.frame(Ah=ah,Bh=bh)
+	fpn
 }
 
 args = commandArgs(trailingOnly=TRUE)
@@ -105,6 +82,7 @@ if (length(lev) > 1) {
 		q("no")
 	}
 
+	lev0 = seq(nflevg)
 	levf = sapply(etafp,function(x) which.min(abs(x-eta)))
 	lev = seq(nfp3s)
 }
@@ -182,13 +160,29 @@ vars:",fpnoms,"\n")
 		}
 	}
 
-	sp1 = spnorm(nd,levf,abbrev=FALSE)
+	if (length(lev) > 1) {
+		sp1 = spnorm(nd,lev0,abbrev=FALSE)
+	} else {
+		sp1 = spnorm(nd,levf,abbrev=FALSE)
+	}
+
+	# some small fix for different names (but same variable)
+	spnoms = dimnames(sp1)[[3]]
+	ind = match("HUMIDITY",spnoms)
+	if (! is.na(ind)) dimnames(sp1)[[3]][ind] = "HUMI.SPECIFI"
+
 	if (! is.null(sp1)) {
 		indt = match(times,dimnames(sp1)[[1]])
 		indv = match(fpnoms,dimnames(sp1)[[3]])
 		if (any(! is.na(indt)) && any(! is.na(indv))) {
 			leg = c(leg,"SP")
 			sp1 = sp1[indt,,indv,drop=FALSE]
+			if (length(lev) > 1) {
+				cat("--> augment fpl to",nflevg,"levels\n")
+				fpl = lapply(fpl,augmentlev,nflevg,levf)
+				lev = lev0
+			}
+
 			fpl = c(fpl,list(sp1))
 		} else {
 			cat("--> SP times:",dimnames(sp1)[[1]],"\n")
@@ -196,13 +190,24 @@ vars:",fpnoms,"\n")
 		}
 	}
 
-	gp1 = gpnorm(nd,levf,gpout=gpfre,abbrev=FALSE)
+	if (length(lev) > 1) {
+		gp1 = gpnorm(nd,lev0,gpout=gpfre,abbrev=FALSE)
+	} else {
+		gp1 = gpnorm(nd,levf,gpout=gpfre,abbrev=FALSE)
+	}
+
 	if (! is.null(gp1)) {
 		indt = match(times,dimnames(gp1)[[1]])
 		indv = match(fpnoms,dimnames(gp1)[[4]])
 		if (any(! is.na(indt)) && any(! is.na(indv))) {
 			leg = c(leg,"GFL")
 			gp1 = gp1[indt,,,indv,drop=FALSE]
+			if (length(lev) > 1) {
+				cat("--> augment fpl to",nflevg,"levels\n")
+				fpl = lapply(fpl,augmentlev,nflevg,levf)
+				lev = lev0
+			}
+
 			fpl = c(fpl,list(gp1))
 		}
 	}
@@ -281,7 +286,7 @@ leg = leg[which(! sapply(fpl,is.null))]
 fpl = fpl[! sapply(fpl,is.null)]
 
 nf = length(fpnoms)
-nt = dim(fp1)[1]
+nt = dim(fpl[[1]])[1]
 
 if (length(lev) > 1) {
 	cat("Produce vertical profiles\n")
@@ -300,7 +305,7 @@ if (length(lev) > 1) {
 
 		for (j in 1:min(nf-nj*i,nj)+nj*i) {
 			cat(". FP field",fpnoms[j],"in",ficpng,"\n")
-			y = aperm(fp1[indt,,,j],c(2,1,3))
+			y = aperm(fpl[[1]][indt,,,j],c(2,1,3))
 			plotvmnx(y,lev,xlab=fpnoms[j],main=c(tt[j],ts))
 
 			if (nr == 1) next
@@ -320,25 +325,30 @@ if (length(lev) > 1) {
 		cat("--> groups of levels:",grouplev,"\n")
 		indg = 0
 		leg = character()
+		fp1 = fpl[[1]]
 		for (i in seq(along=grouplev)) {
 			indi = which(lev <= grouplev[i])
 			indg = indi[indi > max(indg)]
 			cat(".. level indices:",range(indg),"\n")
 			leg[i] = sprintf("L %d-%d",min(indg),max(indg))
-			gpi = fp1[,1,,,drop=FALSE]
-			gpi[,,1,] = apply(fp1[,indg,1,,drop=FALSE],c(1,3,4),mean)
-			gpi[,,2,] = apply(fp1[,indg,2,,drop=FALSE],c(1,3,4),min)
-			gpi[,,3,] = apply(fp1[,indg,3,,drop=FALSE],c(1,3,4),max)
-			fpl[[i]] = gpi
+			fpi = fp1[,1,,,drop=FALSE]
+			fpi[,,1,] = apply(fp1[,indg,1,,drop=FALSE],c(1,3,4),mean)
+			fpi[,,2,] = apply(fp1[,indg,2,,drop=FALSE],c(1,3,4),min)
+			fpi[,,3,] = apply(fp1[,indg,3,,drop=FALSE],c(1,3,4),max)
+			fpl[[i]] = fpi
 		}
 
-		fp1 = fpl[[1]]
 		lev = 0
 	}
-} else if (length(lev) == 1 && nt == 1) {
-	cat("1 time-step only\n")
-} else {
+}
+
+if (length(lev) == 1) {
 	cat("Produce time-series, level",lev,"\n")
+	if (nt == 1) {
+		cat("1 time-step only\n")
+		quit("no")
+	}
+
 	if (length(fpl) > 1) {
 		con = file(sprintf("%s/%s.txt",pngd,ptype),"wt")
 		for (i in seq(along=fpl)[-1]) {
@@ -374,10 +384,9 @@ if (length(lev) > 1) {
 	x = pretty(ttime[it]/tfreq,7)*tfreq
 	xaxp = c(range(x),length(x)-1)
 	fpl = lapply(fpl,function(x) x[it,,,,drop=FALSE])
-	fp1 = fpl[[1]]
 
 	cat("FP norms",fpref,"\n")
-	fpnoms = dimnames(fp1)[[4]]
+	fpnoms = dimnames(fpl[[1]])[[4]]
 	titre = paste("FP norm of",fpnoms)
 	if (lev > 0) titre = paste(titre,"- lev",lev)
 

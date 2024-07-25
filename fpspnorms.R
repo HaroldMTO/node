@@ -8,40 +8,17 @@ getarg = function(x,args)
 	strsplit(sub(sprintf("\\<%s=",x),"",args[ind]),split=":")[[1]]
 }
 
-abh = function(nd,nflevg)
+augmentlev = function(fp,nlev,ind)
 {
-	ih = grep("A and B (at half levels|on half layers)",nd)
-	ind = ih+1+seq(nflevg+1)
-	snum = "-?\\d+\\.\\d+"
-	if (regexpr("JLEV +A +B +ETA +ALPHA",nd[ih+1]) > 0) {
-		# take only 4 values (DELB is not present at level 0)
-		re = sprintf(" *\\d+ +(%s) +(%s) +(%s) +(%s)",snum,snum,snum,snum)
-		ire = regexec(re,nd[ind])
-		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",5))
-		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
-	} else {
-		ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s)",snum,snum,snum),nd[ind])
-		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
-		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",4))
-	}
+	stopifnot(all(ind %in% seq(nlev)))
 
-	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
-	data.frame(Ah=ah,Bh=bh,alpha=alh)
-}
+	if (dim(fp)[2] == nlev) return(fp)
 
-abhfp = function(nd,nfplev)
-{
-	ih = grep("Set up F-post processing, vertical geometry",nd)
-	ind = grep("FPVALH.+FPVBH",nd)
-	ind = ind[ind > ih]
-	stopifnot(length(ind) == nfplev+1)
+	fpn = array(dim=c(dim(fp)[1],nlev,dim(fp)[-(1:2)]))
+	dimnames(fpn) = c(dimnames(fp)[1],list(seq(nlev)),dimnames(fp)[-(1:2)])
+	fpn[,ind,] = fp
 
-	snum = "-?\\d+\\.\\d+"
-	ire = regexec(sprintf(" *FPVALH\\(( *\\d+|\\*)+\\) *= *(%s) +FPVBH\\(( *\\d+|\\*+)\\) *= *(%s)",
-		snum,snum),nd[ind])
-	ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
-	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",5))
-	data.frame(Ah=ah,Bh=bh)
+	fpn
 }
 
 args = commandArgs(trailingOnly=TRUE)
@@ -82,12 +59,17 @@ has.levels = getvar(".*NSPPR",nd) > 0
 
 grouplev = NULL
 ab = abh(nd,nflevg)
-abfp = abhfp(nd,nfp3s)
 vp00 = 101325
 etah = ab$alpha+ab$Bh
 eta = (etah[-1]+etah[-(nflevg+1)])/2
-etahfp = abfp$Ah/vp00+abfp$Bh
-etafp = (etahfp[-1]+etahfp[-(nfp3s+1)])/2
+if (is.null(nfp3s)) {
+	etafp = eta
+	nfp3s = nflevg
+} else {
+	abfp = abhfp(nd,nfp3s)
+	etahfp = abfp$Ah/vp00+abfp$Bh
+	etafp = (etahfp[-1]+etahfp[-(nfp3s+1)])/2
+}
 
 lev1 = lev
 if (length(lev) > 1) {
@@ -157,6 +139,11 @@ vars:",fpnoms,"\n")
 		sp1 = spnorm(nd,lev1,abbrev=FALSE)
 	}
 
+	# some small fix for different names (but same variable)
+	spnoms = dimnames(sp1)[[3]]
+	ind = match("HUMIDITY",spnoms)
+	if (! is.na(ind)) dimnames(sp1)[[3]][ind] = "HUMI.SPECIFI"
+
 	if (! is.null(sp1)) {
 		indt = match(times,dimnames(sp1)[[1]])
 		indv = match(fpnoms,dimnames(sp1)[[3]])
@@ -164,12 +151,8 @@ vars:",fpnoms,"\n")
 			leg = c(leg,"SP")
 			sp1 = sp1[indt,,indv,drop=FALSE]
 			if (length(lev) > 1) {
-				cat("--> augment fp1 to",nflevg,"levels\n")
-				fp0 = array(dim=c(dim(fp1)[1],nflevg,dim(fp1)[-(1:2)]))
-				dimnames(fp0) = c(dimnames(fp1)[1],list(seq(nflevg)),dimnames(fp1)[-(1:2)])
-				fp0[,lev1,] = fp1
-				fp1 = fp0
-				fpl = list(fp1)
+				cat("--> augment fpl to",nflevg,"levels\n")
+				fpl = lapply(fpl,augmentlev,nflevg,lev1)
 				lev = lev0
 			}
 
@@ -244,7 +227,7 @@ leg = leg[which(! sapply(fpl,is.null))]
 fpl = fpl[! sapply(fpl,is.null)]
 
 nf = length(fpnoms)
-nt = dim(fp1)[1]
+nt = dim(fpl[[1]])[1]
 
 if (length(lev) > 1) {
 	cat("Produce vertical profiles\n")
@@ -263,7 +246,7 @@ if (length(lev) > 1) {
 
 		for (j in 1:min(nf-nj*i,nj)+nj*i) {
 			cat(". FP field",fpnoms[j],"in",ficpng,"\n")
-			y = t(fp1[indt,,j])
+			y = t(fpl[[1]][indt,,j])
 			plotvmean(y,lev,type="o",pch=".",cex=1.1,xlab=fpnoms[j],main=c(tt[j],ts))
 
 			if (nr == 1) next
@@ -277,10 +260,35 @@ if (length(lev) > 1) {
 
 		dev.off()
 	}
-} else if (length(lev) == 1 && nt == 1) {
-	cat("1 time-step only\n")
-} else {
-	cat("Produce time-series\n")
+
+	if (! is.null(grouplev)) {
+		cat("--> groups of levels:",grouplev,"\n")
+		indg = 0
+		leg = character()
+		fp1 = fpl[[1]]
+		for (i in seq(along=grouplev)) {
+			indi = which(lev <= grouplev[i])
+			indg = indi[indi > max(indg)]
+			cat(".. level indices:",range(indg),"\n")
+			leg[i] = sprintf("L %d-%d",min(indg),max(indg))
+			fpi = fp1[,1,,,drop=FALSE]
+			fpi[,,1,] = apply(fp1[,indg,1,,drop=FALSE],c(1,3,4),mean)
+			fpi[,,2,] = apply(fp1[,indg,2,,drop=FALSE],c(1,3,4),min)
+			fpi[,,3,] = apply(fp1[,indg,3,,drop=FALSE],c(1,3,4),max)
+			fpl[[i]] = fpi
+		}
+
+		lev = 0
+	}
+}
+
+if (length(lev) == 1) {
+	cat("Produce time-series, level",lev,"\n")
+	if (nt == 1) {
+		cat("1 time-step only\n")
+		quit("no")
+	}
+
 	tt = sprintf("FP norm of %s",fpnoms)
 	nc = 2
 	nr = min(1+(nf-1)%/%2,2)
@@ -295,7 +303,7 @@ if (length(lev) > 1) {
 		for (j in 1:min(nf-nj*i,nj)+nj*i) {
 			cat(". FP field",fpnoms[j],"\n")
 			y = sapply(fpl,function(x) x[,j],simplify="array")
-			plotmean(times,y,tt[j],ylab=fpnoms[j])
+			plotmean(times,y,main=tt[j],ylab=fpnoms[j])
 		}
 
 		dev.off()

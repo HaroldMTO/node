@@ -46,26 +46,18 @@ jotable = function(nd)
 	iobst = grep("Obstype +\\d+ +=+",nd,ignore.case=TRUE)
 	ijog = grep("Jo Global",nd)
 	ndo = nd[iobst[1]:ijog[1]]
-	#ijoh = grep("Jo_Costfunction",ndo)
 	ijoh = grep("Codetype +\\d+ +=+",ndo)
-	njo = length(ijoh)
 	ijot = grep("^ +\\w+ +\\d+( +\\d+\\.\\d+){3}",ndo)
 	lj = strsplit(ndo[ijot],split=" +")
 	jot = t(sapply(lj,function(x) as.numeric(x[3:6])))
 	jot = as.data.frame(jot)
-	jot = cbind(sapply(lj,"[",2),jot)
+	names(jot) = c("DataCount","Jo_Costfunction","Jo/n","ObsErr")
+	vars = sapply(lj,"[",2)
 
-	names(jot) = c("Variable","DataCount","Jo_Costfunction","Jo/n","ObsErr")
-	code = integer(dim(jot)[[1]])
+	indi = findInterval(ijot,ijoh)
+	code = sub(" +Codetype +(\\d+) +.+","\\1",ndo[ijoh[indi]])
 
-	ijoh = c(ijoh,ijog[1])
-	for (i in seq(njo)) {
-		indi = ijot > ijoh[i] & ijot < ijoh[i+1]
-		code[indi] = sub(" +Codetype +(\\d+) +.+","\\1",ndo[ijoh[i]])
-	}
-
-	code = as.integer(code)
-	jot = cbind(Codetype=code,jot)
+	jot = cbind(Codetype=as.integer(code),Variable=vars,jot)
 
 	jot
 }
@@ -174,40 +166,6 @@ costgrad = function(nd)
 	quad = numlines(grep("estimated quadratic cost",nd,value=TRUE,ignore.case=TRUE))
 
 	list(grad=grad,quad=quad)
-}
-
-runtime = function(nd)
-{
-   indw = grep("STEP +\\d+ +H=.+\\+CPU=",nd)
-   walls = as.difftime(gsub("^ *([[:digit:]:]+) .+","\\1",nd[indw]),units="secs")
-   cpus = as.difftime(as.numeric(gsub(".+\\+CPU= *","",nd[indw])),units="secs")
-
-	dwalls = diff(walls)
-
-	# in case of change of date (time goes to 00:00)
-	ind = which(dwalls < 0)
-	for (i in ind) dwalls[-(1:i)] = dwalls[-(1:i)]+86400
-
-	# small escalating over steps within 1s
-	i1 = 1
-	ind = which(c(dwalls,dwalls[length(dwalls)]+1) > 0)
-	for (i in ind) {
-		if (i > i1) {
-			n = i-i1+1
-			dt = seq(0,1,length.out=n+1)[-(n+1)]
-			walls[i1:i] = walls[i1]+dt
-		}
-
-		i1 = i+1
-	}
-
-	dwalls = c(0,diff(walls))
-	rt = data.frame(wall=walls,dwall=dwalls,cpu=cpus)
-
-	i1 = grep("TIME OF START *=",nd)
-	attr(rt,"start") = as.difftime(gsub("^ *TIME OF START *= *","",nd[i1]),units="secs")
-
-	rt
 }
 
 args = commandArgs(trailingOnly=TRUE)
@@ -430,10 +388,8 @@ if (! is.null(lh)) {
 }
 
 cat("Run-time information\n")
-nstop = getvar("NSTOP",nd)
-tstep = getvar("TSTEP",nd)
-if (length(grep("STEP +\\d+ +H=.+\\+CPU=",nd)) > 0) {
-	rt = runtime(nd)
+rt = runtime(nd)
+if (! is.null(rt)) {
 	nts = dim(rt)[1]
 
 	t0 = round(as.numeric(rt$wall[1]-attr(rt,"start"),units="secs") %% 86400,3)
@@ -454,7 +410,7 @@ if (length(grep("STEP +\\d+ +H=.+\\+CPU=",nd)) > 0) {
 		it = findInterval(nts,nt)
 
 		png(sprintf("%s/runtime.png",cargs$png))
-		op = par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+		par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 		its = seq(1,nts,by=pas[it])
 		if (length(fnode) > 1) {
 			matplot(its-1,rts[its,2,],type="h",lty=1,main=c("Wall-time",tt),xlab="Time-step",

@@ -256,7 +256,7 @@ if (length(lev) == 1) {
 			ymax = max(abs(y),na.rm=TRUE)
 			scal = 10^-round(log10(ymax/1.5))
 			if (.001 <= scal && scal < 1) scal = 1
-			plotmean(ttime,y,titre[j],leg,tunit,xlim=xlim,xlab=xlab,ylab=spnoms[j],
+			plotmean(ttime,y,main=titre[j],leg,tunit,xlim=xlim,xlab=xlab,ylab=spnoms[j],
 				xaxp=xaxp,scale=scal)
 		}
 
