@@ -39,6 +39,74 @@ jcdfi = function(nd,nflevg)
 	jc
 }
 
+zonalcoef1 = function(nd,ind)
+{
+	noms = strsplit(gsub("^ *","",nd[ind+1]),split=" +")[[1]]
+	lc = strsplit(gsub("^ *","",nd[ind+1+seq(nsmax+1)]),split=" +")
+	mc = t(sapply(lc,as.numeric))
+	n = mc[,1]
+	mc = mc[,-1]
+	dimnames(mc) = list(n=n,var=noms[-1])
+	mc
+}
+
+zonalcoef = function(nd)
+{
+	ind = grep("SUQNORM *- printing the coefficients of the norm",nd)
+	if (length(ind) == 0) return(NULL)
+
+	if (length(ind) == 1) {
+		nsmax = getvar("NSMAX",nd)
+		mc = zonalcoef1(nd,ind)
+		return(list(mc))
+	} else {
+		ins = grep("COMPUTE NORM FOR RESOLUTION",nd)
+		stopifnot(length(ind) == length(ins))
+		lmc = list()
+		for (i in seq(along=ind)) {
+			nsmax = intlines(nd[ins[i]])
+			lmc[[i]] = zonalcoef1(nd,ind)
+		}
+
+		return(lmc)
+	}
+}
+
+gom = function(nd)
+{
+	ind = grep("GOM variable +RMS",nd)
+	if (length(ind) == 0) return(NULL)
+
+	i1 = grep("Norm of interpolation operator .+ - start",nd)
+	i2 = grep("Norm of interpolation operator .+ - end",nd)
+	stopifnot(length(i1) == length(i2))
+
+	lgom = list()
+
+	for (i in seq(along=i1)) {
+		ind = i1[i]:i2[i]
+		ig = grep(sprintf(" *\\w+ +%s *$",Gnum),nd[ind])
+		lg = strsplit(gsub("^ *","",nd[ind[ig]]),split=" +")
+		gomvar = sapply(lg,"[",1)
+		gomrms = as.numeric(sapply(lg,"[",2))
+
+		it = grep("Observation type: +\\d+ +Number of obs:",nd[ind])
+
+		type = gsub("Observation type: +(\\d+) +Number of obs: *(\\d+)","\\1",nd[ind[it]])
+		nb = gsub("Observation type: +(\\d+) +Number of obs: *(\\d+)","\\2",nd[ind[it]])
+
+		nvar = length(gomrms)/length(it)
+		stopifnot(nvar*length(it) == length(gomrms))
+
+		#cat(". group",i,":",nvar,"variables,",length(it),"types\n")
+		gom = matrix(gomrms,ncol=length(it),dimnames=list(var=gomvar[1:nvar],type=type))
+		attr(gom,"nobs") = as.integer(nb)
+		lgom[[i]] = gom
+	}
+
+	lgom
+}
+
 jotable = function(nd)
 {
 	if (length(grep("JOT-sname",nd)) == 0) return(NULL)
@@ -182,6 +250,8 @@ if (! "png" %in% names(cargs) && capabilities("X11")) {
 
 if (! "png" %in% names(cargs)) cargs$png = "."
 
+if (interactive()) browser()
+
 fnode = grep("=",args,invert=TRUE,value=TRUE)
 nd = readLines(fnode[1])
 if (length(fnode) > 1) {
@@ -234,6 +304,52 @@ if (! is.null(jot)) {
 		col.names=sprintf("% 12.12s",names(jod)))
 	cat("</pre>\n",file=con)
 	close(con)
+}
+
+cat("GOM values\n")
+lgom = gom(nd)
+if (! is.null(lgom)) {
+	gomvar = unique(unlist(sapply(lgom,function(x) dimnames(x)[[1]])))
+	nvar = sapply(lgom,function(x) dim(x)[1])
+	nt = sapply(lgom,function(x) dim(x)[2])
+	stopifnot(all(duplicated(nt)[-1]))
+	nvarx = max(nvar)
+	lgomx = lgom[nvar == nvarx]
+	gomvar = dimnames(lgomx[[1]])[[1]]
+	mgom = simplify2array(lgomx)
+	cat("Global means of GOM variables:\n")
+	print(apply(mgom,1,mean))
+
+	ngom = t(sapply(lgomx,function(x) attr(x,"nobs")))
+
+	png(sprintf("%s/gomt.png",cargs$png))
+	par(mfrow=c(3,3))
+	for (i in seq(9)) {
+		m = t(mgom[i,,])
+		tt = sprintf("GOM variable %s",gomvar[i])
+		matplot(m,type="b",lty=1,pch=20,main=c(tt,"per obs type"),xlab="Time-step",
+			ylab="RMS")
+	}
+
+	dev.off()
+
+	nvarx = min(nvar)
+	lgomx = lgom[nvar == nvarx]
+	gomvar = dimnames(lgomx[[1]])[[1]]
+	mgom = simplify2array(lgomx)
+	cat("Global means of GOM variables:\n")
+	print(apply(mgom,1,mean))
+
+	png(sprintf("%s/gom.png",cargs$png))
+	par(mfrow=c(3,2))
+	for (i in seq(min(nvarx,6))) {
+		m = t(mgom[i,,])
+		tt = sprintf("GOM variable %s",gomvar[i])
+		matplot(m,type="b",lty=1,pch=20,main=c(tt,"per obs type"),xlab="Time-step",
+			ylab="RMS")
+	}
+
+	dev.off()
 }
 
 cat("Jc DFI\n")
