@@ -163,6 +163,31 @@ vars:",fpnoms,"\n")
 		}
 	}
 
+	if (length(lev) > 1) {
+		gp1 = gpnorm(nd,lev0,gpout=gpfre,abbrev=FALSE)
+	} else {
+		gp1 = gpnorm(nd,lev1,gpout=gpfre,abbrev=FALSE)
+	}
+
+	if (! is.null(gp1)) {
+		indt = match(times,dimnames(gp1)[[1]])
+		indv = match(fpnoms,dimnames(gp1)[[4]])
+		if (any(! is.na(indt)) && any(! is.na(indv))) {
+			leg = c(leg,"GFL")
+			gp1 = gp1[indt,,1,indv,drop=FALSE]
+			if (length(lev) > 1) {
+				cat("--> augment fpl to",nflevg,"levels\n")
+				fpl = lapply(fpl,augmentlev,nflevg,lev1)
+				lev = lev0
+			}
+
+			fpl = c(fpl,list(gp1))
+		} else {
+			cat("--> GP times:",dimnames(gp1)[[1]],"\n")
+			cat("--> GP vars:",dimnames(gp1)[[4]],"\n")
+		}
+	}
+
 	if (length(leg) == 1) {
 		cat("--> no mixed spectral norms, quit\n")
 		quit("no")

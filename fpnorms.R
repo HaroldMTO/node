@@ -54,6 +54,7 @@ cat("Read file",fnode[1],"\n")
 nd = readLines(fnode[1])
 nd = grep("^ *$",nd,value=TRUE,invert=TRUE)
 nflevg = getvar("NFLEVG",nd)
+nfplev = getvar("NFPLEV",nd)
 nfp3s = getvar("NFP3S",nd)
 has.levels = getvar(".*NSPPR",nd) > 0
 
@@ -66,7 +67,7 @@ if (is.null(nfp3s)) {
 	etafp = eta
 	nfp3s = nflevg
 } else {
-	abfp = abhfp(nd,nfp3s)
+	abfp = abhfp(nd,nfplev)
 	etahfp = abfp$Ah/vp00+abfp$Bh
 	etafp = (etahfp[-1]+etahfp[-(nfp3s+1)])/2
 }
@@ -209,6 +210,9 @@ vars:",fpnoms,"\n")
 			}
 
 			fpl = c(fpl,list(gp1))
+		} else {
+			cat("--> GP times:",dimnames(gp1)[[1]],"\n")
+			cat("--> GP vars:",dimnames(gp1)[[4]],"\n")
 		}
 	}
 
