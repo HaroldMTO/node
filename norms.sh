@@ -89,6 +89,7 @@ do
 	-nogmv) norms=$(echo $norms | sed -re 's:gmv::');;
 	-noadiab) norms=$(echo $norms | sed -re 's:adiab::');;
 	-noslb2) norms=$(echo $norms | sed -re 's:slb2::');;
+	-nofp) norms=$(echo $norms | sed -re 's:fp::');;
 	-opt)
 		ropt=$2
 		shift

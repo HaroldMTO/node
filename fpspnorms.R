@@ -174,7 +174,11 @@ vars:",fpnoms,"\n")
 		indv = match(fpnoms,dimnames(gp1)[[4]])
 		if (any(! is.na(indt)) && any(! is.na(indv))) {
 			leg = c(leg,"GFL")
-			gp1 = gp1[indt,,1,indv,drop=FALSE]
+			# let's drop dim 3 only
+			dd = dim(gp1)
+			dn = dimnames(gp1)
+			gp1 = gp1[indt,,1,indv]
+			if (length(dim(gp1)) != 3) gp1 = array(gp1,dd[-3],dn[-3])
 			if (length(lev) > 1) {
 				cat("--> augment fpl to",nflevg,"levels\n")
 				fpl = lapply(fpl,augmentlev,nflevg,lev1)
