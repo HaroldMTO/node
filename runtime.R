@@ -147,6 +147,91 @@ joMean = function(jot,by=c("Codetype","Variable"))
 	jod
 }
 
+scatqc = function(nd)
+{
+	i1 = grep("CELL NO. +N.OBS",nd)
+	i2 = grep("TOTAL OF +\\d+ +ASCAT +SCATT",nd)
+	if (length(i1) == 0 || length(i2) == 0) return(NULL)
+
+	stopifnot(length(i1) == length(i2))
+
+	lqc = vector("list",length(i1))
+
+	for (i in seq(along=i1)) {
+		ind = seq(i1[i]+1,i2[i]-1)
+		l = strsplit(sub("^ +","",nd[ind]),split=" +")
+		m = sapply(l,as.character)
+		df = as.data.frame(t(m))
+		names(df) = strsplit(gsub("^ +CELL NO.","cell",nd[i1[i]]),split=" +")[[1]]
+		lqc[[i]] = df
+	}
+
+	lqc
+}
+
+screenstat = function(nd)
+{
+	i1 = grep("OB.TYP +REPORTS +ACTIVE +PASSIVE",nd)
+	if (length(i1) == 0) return(NULL)
+
+	i2 = grep("^ +-{30,}",nd)
+	ii = grep("EVENT SUMMARY OF",nd)
+	i2 = i2[i1[1] < i2 & i2 < ii[1]]
+
+	stopifnot(length(i1) == length(i2))
+
+	noms = strsplit(gsub("^ *","",nd[i1[1]]),split=" +")[[1]]
+
+	lst = vector("list",length(i1))
+
+	for (i in seq(along=i1)) {
+		ind = seq(i1[i]+1,i2[i]-1)
+		l = strsplit(sub("^ +","",nd[ind]),split=" +")
+		m = sapply(l,as.integer)
+		nums = m[1,]
+		m = m[-1,]
+		dimnames(m) = list(noms[-1],nums)
+		lst[[i]] = m
+	}
+
+	ii = grep("STATUS SUMMARY OF",nd)
+	names(lst) = gsub("^ *STATUS SUMMARY OF +(\\w+).*","\\1",nd[ii])
+	lst
+}
+
+screenobs = function(nd)
+{
+	i1 = grep("NUMBER OF +(.+?) +IN DIFFERENT OBSERVATION TYPES",nd)
+	if (length(i1) == 0) return(NULL)
+
+	i2 = grep("^ +-{30,}",nd)
+	ii = grep("FINISH SCREENING OF OBSERVATIONS",nd)
+	i2 = i2[i1[1] < i2 & i2 < ii]
+
+	stopifnot(length(i1) == length(i2))
+
+	noms = gsub("^ *NUMBER OF +(.+?) +IN DIFFERENT OBSERVATION TYPES.*","\\1",nd[i1])
+
+	lno = vector("list",length(i1))
+
+	for (i in seq(along=i1)) {
+		ind = seq(i1[i]+2,i2[i]-1)
+		ii = grep("VARIAB",nd[ind])
+		stopifnot(length(ii) == 1)
+		l = strsplit(sub("^ +","",nd[ind[-(1:ii)]]),split=" +")
+		m = sapply(l,as.integer)
+		ii = grep("OB\\.TYP",nd[ind])
+		stopifnot(length(ii) == 1)
+		nums = m[1,]
+		m = m[-1,]
+		dimnames(m) = list(intlines(nd[ind[ii]]),nums)
+		lno[[i]] = m
+	}
+
+	names(lno) = noms
+	lno
+}
+
 canawagons = function(nd)
 {
 	i1 = grep("nombre total de wagons",nd)
@@ -234,6 +319,82 @@ costgrad = function(nd)
 	quad = numlines(grep("estimated quadratic cost",nd,value=TRUE,ignore.case=TRUE))
 
 	list(grad=grad,quad=quad)
+}
+
+bmat = function(nd,nflevg)
+{
+	i1 = grep("correlations *\\(\\*100\\)",nd)
+	if (length(i1) == 0) return(NULL)
+
+	ii = grep("Diagnostics of the horizontal correlations",nd)
+
+	nf = length(i1)
+	if (nflevg > 100) {
+		ind = seq(i1[nf]+5,ii-1)-i1[nf]
+	} else {
+		ind = seq(i1[nf]+3,ii-1)-i1[nf]
+	}
+
+	lcor = list()
+
+	nl = length(ind)
+	for (i in seq(along=i1)) {
+		indi = i1[i]+ind
+		cor = sapply(indi,function(j) gsub("(...)"," \\1",substring(nd[j],2)))
+		mb = intlines(cor)
+		m = matrix(mb,ncol=nflevg)
+		lcor[[i]] = m/100
+	}
+
+	noms = gsub("^ *(\\w.+\\>) +correlations.+","\\1",nd[i1])
+	ips = grep("T, *Ps",noms)
+	if (length(ips) == 1) {
+		lcor[[nf+1]] = lcor[[ips]][nflevg+1,]
+		lcor[[ips]] = lcor[[ips]][-(nflevg+1),]
+		noms[ips] = "T"
+		noms = c(noms,"Ps")
+	}
+
+	names(lcor) = noms
+
+	lcor
+}
+
+bcor = function(nd)
+{
+	i1 = grep("VARIABLE +\\d+ +CORREL LENGTH SCALES",nd)
+	if (length(i1) == 0) return(NULL)
+
+	lb = vector("list",length(i1))
+	noms = gsub("^ *(\\w.+\\>) +correlations.+","\\1",nd[i1])
+
+	ii = grep("Diagnostics of the horizontal correlations",nd)
+
+	nf = length(i1)
+	m = intlines(nd[seq(i1[nf]+3,ii-1)])
+	for (i in seq(nf-1)) {
+		ind = seq(i1[i]+1,i1[i+1]-1)
+		lb[[i]] = numlines(nd[ind])
+	}
+
+	lb[[nf]] = numlines(nd[i1[nf]+1])
+	lb
+}
+
+jberr = function(nd,nflevg)
+{
+	i1 = grep("Vor +unbal Div",nd)
+	if (length(i1) == 0) return(NULL)
+
+	ii = grep("Q +unbal O3",nd)
+	stopifnot(length(ii) == 1)
+
+	noms = unlist(strsplit(sub("^ +","",nd[i1:ii]),split="  +"))
+	jb = numlines(sub("^ +\\d+","",nd[ii+seq(nflevg)]))
+	jb = matrix(jb,nrow=nflevg,byrow=TRUE,dimnames=list(1:nflevg,noms))
+
+	i0 = apply(jb,2,function(x) any(x != -999))
+	jb[,i0]
 }
 
 args = commandArgs(trailingOnly=TRUE)
@@ -428,7 +589,7 @@ if (! is.null(ritz)) {
 	iterg = seq(along=cost$grad)-1
 	iterq = seq(along=cost$quad)-1
 
-	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0),pch=20)
+	par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0),pch=20)
 	if (length(fnode) > 1) {
 		plotmean(iter,rits[,1,],leg,main="Ritz value 1",xlab=xlab,ylab="Ritz 1")
 		plotmean(iter,rits[,2,],leg,main="Ritz value 2",xlab=xlab,ylab="Ritz 2")
@@ -443,6 +604,59 @@ if (! is.null(ritz)) {
 	}
 
 	dev.off()
+}
+
+cat("B matrix\n")
+lcor = bmat(nd,nflevg)
+if (! is.null(lcor)) {
+	png(sprintf("%s/bmat.png",cargs$png))
+	par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	for (i in 1:4) {
+		tt = sprintf("Correlation matrix of %s",names(lcor)[i])
+		sstt = sprintf("range: %s",paste(range(lcor[[i]]),collapse=" "))
+		image(1:nflevg,1:nflevg,lcor[[i]],col=hcl.colors(10,"BlueRed",alpha=.8),
+			main=c(tt,sstt),xlab="Level",ylab="Level")
+		contour(1:nflevg,1:nflevg,lcor[[i]],5,labcex=.7,add=TRUE)
+	}
+
+	dev.off()
+
+	png(sprintf("%s/bmatps.png",cargs$png))
+	plot(lcor[[5]],1:nflevg,type="l",ylim=c(nflevg,1),main="Correlation for Ps",
+		xlab="Correlation",ylab="Level")
+	abline(v=0,col="darkgrey")
+
+	dev.off()
+}
+
+cat("Correlation length scales\n")
+lcor = bcor(nd)
+if (! is.null(lcor)) {
+	ml = simplify2array(lcor[1:5])/1000
+	png(sprintf("%s/corlen.png",cargs$png))
+	tt = c("Correlation lengths of CV (/1000)",sprintf("Cor. length for SP: %g",lcor[[6]]/1000))
+	matplot(ml,1:nflevg,type="l",lty=1,ylim=c(nflevg,1),main=tt,
+		xlab="Cor. length",ylab="Level")
+	legend("topleft",sprintf("Var %d",1:5),lty=1,col=1:5)
+	dev.off()
+}
+
+cat("Jb standard errors\n")
+jb = jberr(nd,nflevg)
+if (! is.null(jb)) {
+	tt = sprintf("Jb stderr of %s",dimnames(jb)[[2]])
+	for (i in 1:3) {
+		png(sprintf("%s/jberr%d.png",cargs$png,i))
+		nc = min(3,dim(jb)[2]-3*(i-1))
+		par(mfrow=c(1,nc),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+		for (j in 3*(i-1)+seq(nc)) {
+			plot(jb[,j],1:nflevg,type="l",lty=1,ylim=c(nflevg,1),main=tt[j],
+				xlab="Standard error",ylab="Level")
+			abline(v=0,col="grey")
+		}
+
+		dev.off()
+	}
 }
 
 cat("CANARI statistics\n")
