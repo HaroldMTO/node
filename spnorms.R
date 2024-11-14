@@ -253,9 +253,8 @@ if (length(lev) == 1) {
 		for (j in 1:min(nf-nj*i,nj)+nj*i) {
 			cat(". SP field",spnoms[j],"\n")
 			y = sapply(spl,function(x) x[,1,j])
-			ymax = max(abs(y),na.rm=TRUE)
-			scal = 10^-round(log10(ymax/1.5))
-			if (.001 <= scal && scal < 1) scal = 1
+			scal = 1/scale10(y)
+			if (.001 <= scal && scal <1 || is.infinite(scal)) scal = 1
 			plotmean(ttime,y,main=titre[j],leg,tunit,xlim=xlim,xlab=xlab,ylab=spnoms[j],
 				xaxp=xaxp,scale=scal)
 		}

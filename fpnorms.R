@@ -416,10 +416,8 @@ if (length(lev) == 1) {
 		for (j in 1:min(nf-nj*i,nj)+nj*i) {
 			y = sapply(fpl,function(x) x[,1,,j],simplify="array")
 			il = which(apply(y,3,function(x) any(! is.na(x))))
-			ymax = max(abs(y[,1,]),na.rm=TRUE)
-			scal = 10^-round(log10(ymax/1.5))
+			scal = 1/scale10(y[,1,])
 			if (.001 <= scal && scal < 1 || is.infinite(scal)) scal = 1
-			cat(". FP field",fpnoms[j],"in",ficpng,"- scaling:",scal,ymax,"\n")
 			plotmean(ttime,y[,1,il],main=titre[j],leg[il],tunit,xlim=xlim,
 				xlab=xlab,ylab=fpnoms[j],xaxp=xaxp,scale=scal,col=il)
 

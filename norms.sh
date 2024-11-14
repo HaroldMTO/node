@@ -32,9 +32,10 @@ Details:
 One file at least is mandatory.
 	A single HTML file is produced, containing text and images from all NODE files.
 	Plots are produced in one single directory named after the 1st NODE file, its prefix \
-'NODE'/'node' being deleted. If several NODE files are passed, plots show curves for \
-all the files but for main norms only. If one single file is passed, plots show curves \
-for all the norms printed.
+'NODE'/'node' being deleted (an exception is made for classical NODE.001_01: the directory \
+name is the one of the output HTML file without extension 'html'). If several NODE files \
+are passed, plots show curves for all the files but for main norms only. If one single \
+file is passed, plots show curves for all the norms printed.
 	When option '-lev' is passed, level norms must exist in NODE files. For option \
 in form '-lev I1:I2:...', values are indicated by integer values, separated \
 with colon. These values indicate 'breaks', where group i contains levels from 1 to i, \
@@ -143,6 +144,8 @@ fi
 
 loc=$(dirname $fout)
 dd=$loc/$(echo $fin | sed -re 's:^(.+/)?node\.?(\w+):\2:i')
+echo $dd | grep -qE '(.+/)?001_01$' && dd=$loc/$(basename $fout .html)
+dd=$(echo $dd | sed -re 's:^\./::')
 mkdir -p $dd
 echo "--> output sent to $dd"
 
@@ -173,14 +176,14 @@ then
 		png=$dd $ropt
 fi
 
-if grep -iqE "gpnorm adiab" $fin && echo $norms | grep -q adiab
+if grep -iqE "gpnorm adiab call_sl" $fin && echo $norms | grep -q adiab
 then
 	echo "GP norms for ADIAB"
 	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev type=gpadiab$suf \
-		gpref="gpnorm adiab" png=$dd $ropt
+		gpref="gpnorm adiab call_sl" gpre="gpnorm adiab cpg" png=$dd $ropt
 fi
 
-if grep -iqE "gpnorm zb2" $fin && echo $norms | grep -q slb2
+if grep -iqE "gpnorm zb2 cpg$" $fin && echo $norms | grep -q slb2
 then
 	echo "GP norms for ZB2"
 	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev type=gpsi$suf \
@@ -190,7 +193,7 @@ fi
 
 if grep -iqE "FULL-POS GPNORMS" $fin && echo $norms | grep -q fp
 then
-	if grep -iqE "gpnorm dynfpos" $fin
+	if grep -iqE "gpnorm dynfpos z" $fin
 	then
 		echo "GP norms for FullPOS"
 		fpre="gpnorm dynfpos di:gpnorm dynfposlag:gpnorm endvpos z:gpnorm endvpos fp:allfpos"
@@ -198,7 +201,7 @@ then
 			fpref="gpnorm dynfpos z" fpre="$fpre" png=$dd $ropt
 	fi
 
-	if [ -z "$fin2" ]
+	if [ -z "$fin2" ] && grep -iq "allfpos" $fin
 	then
 		echo "GP norms for FullPOS+SPEC+GFL"
 		R --slave -f $node/fpnorms.R --args $fin lev=$lev type=fpgp$suf fpref="allfpos" \
