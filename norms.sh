@@ -12,7 +12,7 @@ Description:
 
 Usage:
 	norms.sh NODE1 NODE2... -o HTML [-lev (LEV|I1:I2:...)] [-detail] [-nogfl] [-nogmv] \
-[-noadiab] [-noslb2] [-opt OPTIONS] [-h]
+[-noadiab] [-noslb2] [-nospt1] [-nogpt1] [-not1] [-opt OPTIONS] [-h]
 
 Options:
 	NODE1, NODE2,...: NODE files containing SP and/or GP norms to plot (see Details)
@@ -23,6 +23,7 @@ profiles.
 	-lev I1:I2:...: produce plots for groups of levels
 	-detail: activate 'detailed' plots for gpnorm (graphics contain 4 plots instead of 2)
 	-nogfl,nogmv,...: deactivate plots for this kind of norms. SP norms cannot!
+	-nospt1/nogpt1/not1: deactivate plots for SP, GP or SP+GP norms at t1 (resp.)
 	OPTIONS: options to pass to the R script, in the form key=value, separated by space \
 and with keys among hmin, hmax (see Options)
 	-h: print this help and exit normally
@@ -56,7 +57,7 @@ then
 	exit
 fi
 
-norms="gmvgfladiabslb2fp"
+norms="spt1gpt1gmvgfladiabslb2fp"
 fin=""
 fin2=""
 fout=""
@@ -91,6 +92,9 @@ do
 	-noadiab) norms=$(echo $norms | sed -re 's:adiab::');;
 	-noslb2) norms=$(echo $norms | sed -re 's:slb2::');;
 	-nofp) norms=$(echo $norms | sed -re 's:fp::');;
+	-nospt1) norms=$(echo $norms | sed -re 's:spt1::');;
+	-nogpt1) norms=$(echo $norms | sed -re 's:gpt1::');;
+	-not1) norms=$(echo $norms | sed -re 's:[sg]pt1::g');;
 	-opt)
 		ropt=$2
 		shift
@@ -152,14 +156,18 @@ echo "--> output sent to $dd"
 grep -q 'END CNT0' $fin || echo "Warning: no 'END CNT0', program may crash" >&2
 
 echo "SP norms for SPEC"
-R --slave -f $node/spnorms.R --args $fin $fin2 lev=$lev $spref \
-	spre="spnorm t1 *tr(ansdir)?:spnorm t1si:spnorm t1 spcm" png=$dd $ropt
+spre=""
+echo $norms | grep -q spt1 && spre="spnorm t1 *tr(ansdir)?:spnorm t1si:spnorm t1 spcm"
+R --slave -f $node/spnorms.R --args $fin $fin2 lev=$lev $spref spre="$spre" png=$dd $ropt
 
 if echo $norms | grep -q gfl
 then
 	echo "GP norms for GFL"
+	gpre=""
+	echo $norms | grep -q gpt1 &&
+		gpre="gpnorm gflt1 (call_)?sl$:gpnorm gflt1 slmf:gpnorm gflt1 (cpg)?lag:gpnorm gfl tstep"
 	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev $gpref type=gpgfl$suf \
-		gpre="gpnorm gflt1 (call_)?sl$:gpnorm gflt1 slmf:gpnorm gflt1 (cpg)?lag:gpnorm gfl tstep" png=$dd $ropt
+		gpre="$gpre" png=$dd $ropt
 
 	if [ -z "$fin2" ]
 	then
@@ -171,9 +179,10 @@ fi
 if grep -iqE "gpnorm gmvt0" $fin && echo $norms | grep -q gmv
 then
 	echo "GP norms for GMV"
+	gpre=""
+	echo $norms | grep -q gpt1 && gpre="gpnorm gmvt1 sl:gpnorm gmvt1 slmf:gpnorm gmvt1 cpglag"
 	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev type=gpgmv$suf \
-		gpref="gpnorm gmvt0" gpre="gpnorm gmvt1 sl:gpnorm gmvt1 slmf:gpnorm gmvt1 cpglag" \
-		png=$dd $ropt
+		gpref="gpnorm gmvt0" gpre="$gpre" png=$dd $ropt
 fi
 
 if grep -iqE "gpnorm adiab call_sl" $fin && echo $norms | grep -q adiab

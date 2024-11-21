@@ -113,10 +113,12 @@ gpnoms = dimnames(gp1)[[4]]
 
 if (is.null(gpre) && length(fnode) == 1) {
 	leg = "GP"
+	nt = length(times)
+	nv = length(gpnoms)
 	cat("Select times and variables among:
-times:",times,"
-vars:",gpnoms,"\n")
-	sp1 = spnorm(nd,lev,tag="",abbrev=FALSE)
+times:",head(times[-nt]),"...",times[nt],"
+vars:",head(gpnoms[-nv]),"...",gpnoms[nv],"\n")
+	sp1 = spnorm(nd,lev,abbrev=FALSE)
 	if (! is.null(sp1)) {
 		indt = match(times,dimnames(sp1)[[1]])
 		indv = match(gpnoms,dimnames(sp1)[[3]])
@@ -139,7 +141,7 @@ vars:",gpnoms,"\n")
 		if (is.null(leg)) leg = sub(".*node\\.?","",fnode,ignore.case=TRUE)
 		gpre = rep(gpref,length(fnode)-1)
 	} else if (is.null(leg)) {
-		leg = c("t0",sub("gpnorm +","",gpre))
+		leg = c("t0",sub("gpnorm +(gmv|gfl)?","",gpre))
 	}
 
 	for (i in seq(along=gpre)) {

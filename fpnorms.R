@@ -144,9 +144,11 @@ fpnoms = dimnames(fp1)[[4]]
 
 if (is.null(fpre) && length(fnode) == 1) {
 	leg = "FPGP"
+	nt = length(times)
+	nv = length(fpnoms)
 	cat("Select times and variables among:
-times:",times,"
-vars:",fpnoms,"\n")
+times:",head(times[-nt]),"...",times[nt],"
+vars:",head(fpnoms[-nv]),"...",fpnoms[nt],"\n")
 	fpsp1 = fpspnorm(nd,lev)
 	if (! is.null(fpsp1)) {
 		indt = match(times,dimnames(fpsp1)[[1]])
