@@ -80,34 +80,34 @@ wavenb = function(nd)
 
 specdis = function(nd)
 {
-	i1 = grep("^ *NUMPP\\>",nd)
+	i1 = grep("^ *NUMPP\\> *$",nd)
 	i2 = grep("(MAXIMUM )?NUMBER OF THREADS",nd)
 	i2 = i2[i2 > i1]
 	ind = seq(i1+1,i2[1]-1)
 	numpp = intlines(nd[ind])
 
-	i1 = grep("^ *NPROCM",nd)
-	i2 = grep("^ *NFRSTLAT",nd)
+	i1 = grep("^ *NPROCM *$",nd)
+	i2 = grep("^ *NFRSTLAT *$",nd)
 	ind = seq(i1+1,i2-1)
 	nprocm = intlines(nd[ind])
 
-	i1 = grep("^ *NALLMS",nd)
-	i2 = grep("^ *NPTRMS",nd)
+	i1 = grep("^ *NALLMS *$",nd)
+	i2 = grep("^ *NPTRMS *$",nd)
 	ind = seq(i1+1,i2-1)
 	nds = gsub(" \\*{3,}"," 0",nd[ind])
 	nallms = intlines(nds)
 
-	i1 = grep("^ *MYLEVS",nd)
+	i1 = grep("^ *MYLEVS *$",nd)
 	i2 = grep("^ *NUMLL *$",nd)
 	ind = seq(i1+1,i2-1)
 	mylevs = intlines(nd[ind])
 
-	i1 = grep("^ *NBSETLEV",nd)
-	i2 = grep("^ *MYLATS",nd)
+	i1 = grep("^ *NBSETLEV *$",nd)
+	i2 = grep("^ *MYLATS *$",nd)
 	ind = seq(i1+1,i2-1)
 	nbsetlev = intlines(nd[ind])
 
-	i1 = grep("^ *(YDLAP%)?MYMS",nd)
+	i1 = grep("^ *(YDLAP%)?MYMS *$",nd)
 	i2 = grep("^ *(NASM0|YDLAP%NASN0|NALLMS) *$",nd)
 	i2 = i2[i2 > i1]
 	ind = seq(i1+1,i2[1]-1)
@@ -115,7 +115,7 @@ specdis = function(nd)
 
 	i1 = grep("^ *EIGEN-VALUES OF THE LAPLACIAN",nd)
 	i2 = grep("^ *EIGEN-VALUES OF ITS INVERSE",nd)
-	i3 = grep("^ *((YDLAP%)?NASM0G|YDLEP%NESM0G)",nd)
+	i3 = grep("^ *((YDLAP%)?NASM0G|YDLEP%NESM0G):",nd)
 	ind = seq(i1+1,i2-1)
 	rlapdi = numlines(nd[ind])
 
@@ -189,7 +189,7 @@ silev = function(nd,nflevg)
 	data.frame(sivp=sivp,sitlaf=sitlaf,sidphi=sidphi)
 }
 
-sihd = function(nd,nflevg)
+sihd = function(nd,nflevg,nsmax)
 {
 	i1 = grep("\\<PDILEV",nd)
 	if (length(i1) == 0) return(NULL)
@@ -209,8 +209,11 @@ sihd = function(nd,nflevg)
 	}
 
 	i1 = grep("KNSHD *:",nd)
-	i2 = grep("^ *SUHDF",nd)
-	if (length(i1) == 1 && length(i2) == 1) {
+	if (length(i1) == 0) {
+		knshd = rep(nsmax,nflevg)
+	} else {
+		i2 = grep("^ *SUHDF",nd)
+		stopifnot(length(i1) == 1 && length(i2) == 1)
 		il = seq(i1+1,i2-1)
 		knshd = intlines(nd[il])
 	}
@@ -624,7 +627,7 @@ if (! is.null(si)) {
 }
 
 cat("Spectral horizontal diffusion\n")
-hd = sihd(nd,nflevg)
+hd = sihd(nd,nflevg,nsmax)
 pngalt(sprintf("%s/sihd.png",cargs$png))
 if (! is.null(hd)) {
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
