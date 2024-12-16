@@ -130,9 +130,11 @@ fpnoms = dimnames(fp1)[[ndim]]
 
 if (is.null(fpre) && length(fnode) == 1) {
 	leg = "FPSP"
+	nt = length(times)
+	nv = length(fpnoms)
 	cat("Select times and variables among:
-times:",times,"
-vars:",fpnoms,"\n")
+times:",head(times[-nt]),"...",times[nt],"
+vars:",head(fpnoms[-nv]),"...",fpnoms[nt],"\n")
 	if (length(lev) > 1) {
 		sp1 = spnorm(nd,lev0,abbrev=FALSE)
 	} else {

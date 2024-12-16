@@ -254,7 +254,7 @@ if (length(lev) == 1) {
 			cat(". SP field",spnoms[j],"\n")
 			y = sapply(spl,function(x) x[,1,j])
 			scal = 1/scale10(y)
-			if (.001 <= scal && scal <1 || is.infinite(scal)) scal = 1
+			if (! is.finite(scal) || .001 <= scal && scal < 1) scal = 1
 			plotmean(ttime,y,main=titre[j],leg,tunit,xlim=xlim,xlab=xlab,ylab=spnoms[j],
 				xaxp=xaxp,scale=scal)
 		}

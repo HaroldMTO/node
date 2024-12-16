@@ -419,7 +419,7 @@ if (length(lev) == 1) {
 			y = sapply(fpl,function(x) x[,1,,j],simplify="array")
 			il = which(apply(y,3,function(x) any(! is.na(x))))
 			scal = 1/scale10(y[,1,])
-			if (.001 <= scal && scal < 1 || is.infinite(scal)) scal = 1
+			if (! is.finite(scal) || .001 <= scal && scal < 1) scal = 1
 			plotmean(ttime,y[,1,il],main=titre[j],leg[il],tunit,xlim=xlim,
 				xlab=xlab,ylab=fpnoms[j],xaxp=xaxp,scale=scal,col=il)
 
