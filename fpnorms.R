@@ -5,7 +5,10 @@ getarg = function(x,args)
 	ind = grep(sprintf("\\<%s=",x),args)
 	if (length(ind) == 0) return(NULL)
 
-	strsplit(sub(sprintf("\\<%s=",x),"",args[ind]),split=":")[[1]]
+	val = sub(sprintf("\\<%s=",x),"",args[ind])
+	if (! nzchar(val)) return(val)
+
+	strsplit(val,split=":")[[1]]
 }
 
 augmentlev = function(fp,nlev,ind)
@@ -249,7 +252,7 @@ vars:",head(fpnoms[-nv]),"...",fpnoms[nt],"\n")
 		}
 
 		if (is.null(fpi)) {
-			cat("--> no norms for pattern",fpre[i],"\n")
+			#cat("--> no norms for pattern",fpre[i],"\n")
 			next
 		}
 

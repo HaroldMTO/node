@@ -79,11 +79,11 @@ do
 		shift
 		;;
 	-spref)
-		spref="spref=$2"
+		spref="spref='$2'"
 		shift
 		;;
 	-gpref)
-		gpref="gpref=$2"
+		gpref="gpref='$2'"
 		shift
 		;;
 	-detail) suf=detail;;
@@ -157,15 +157,16 @@ grep -q 'END CNT0' $fin || echo "Warning: no 'END CNT0', program may crash" >&2
 
 echo "SP norms for SPEC"
 spre=""
-echo $norms | grep -q spt1 && spre="spnorm t1 *tr(ansdir)?:spnorm t1si:spnorm t1 spcm"
+st1="spnorm t1"
+echo $norms | grep -q spt1 && spre="$st1 *tr(ansdir)?:$st1 *si:$st1 spcm"
 R --slave -f $node/spnorms.R --args $fin $fin2 lev=$lev $spref spre="$spre" png=$dd $ropt
 
 if echo $norms | grep -q gfl
 then
 	echo "GP norms for GFL"
-	gpre=""
-	echo $norms | grep -q gpt1 &&
-		gpre="gpnorm gflt1 (call_)?sl$:gpnorm gflt1 slmf:gpnorm gflt1 (cpg)?lag:gpnorm gfl tstep"
+	gpre="gpnorm gfl tstep"
+	gt1="gpnorm gflt1"
+	echo $norms | grep -q gpt1 && gpre="$gt1 (call_)?sl$:$gt1 slmf:$gt1 (cpg)?lag:$gpre"
 	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev $gpref type=gpgfl$suf \
 		gpre="$gpre" png=$dd $ropt
 
@@ -180,7 +181,8 @@ if grep -iqE "gpnorm gmvt0" $fin && echo $norms | grep -q gmv
 then
 	echo "GP norms for GMV"
 	gpre=""
-	echo $norms | grep -q gpt1 && gpre="gpnorm gmvt1 sl:gpnorm gmvt1 slmf:gpnorm gmvt1 cpglag"
+	gt1="gpnorm gmvt1"
+	echo $norms | grep -q gpt1 && gpre="$gt1 sl:$gt1 slmf:$gt1 cpglag"
 	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev type=gpgmv$suf \
 		gpref="gpnorm gmvt0" gpre="$gpre" png=$dd $ropt
 fi

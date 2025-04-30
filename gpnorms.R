@@ -1,13 +1,16 @@
 library(mfnode)
 
-gpfre = sprintf("%s|DIV",gpfre)
+gpfre = sprintf("%s|DIV|ETADOT",gpfre)
 
 getarg = function(x,args)
 {
 	ind = grep(sprintf("\\<%s=",x),args)
 	if (length(ind) == 0) return(NULL)
 
-	strsplit(sub(sprintf("\\<%s=",x),"",args[ind]),split=":")[[1]]
+	val = sub(sprintf("\\<%s=",x),"",args[ind])
+	if (! nzchar(val)) return(val)
+
+	strsplit(val,split=":")[[1]]
 }
 
 args = commandArgs(trailingOnly=TRUE)
@@ -136,7 +139,7 @@ vars:",head(gpnoms[-nv]),"...",gpnoms[nv],"\n")
 		cat("--> no mixed norms, quit\n")
 		quit("no")
 	}
-} else {
+} else if (all(nzchar(gpre))) {
 	if (length(fnode) > 1) {
 		if (is.null(leg)) leg = sub(".*node\\.?","",fnode,ignore.case=TRUE)
 		gpre = rep(gpref,length(fnode)-1)
@@ -158,7 +161,7 @@ vars:",head(gpnoms[-nv]),"...",gpnoms[nv],"\n")
 		}
 
 		if (is.null(gpi)) {
-			cat("--> no norms for pattern",gpre[i],"\n")
+			#cat("--> no norms for pattern",gpre[i],"\n")
 			next
 		}
 
