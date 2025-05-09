@@ -54,7 +54,7 @@ fpref = getarg("fpref",args)
 fnode = grep("=",args,invert=TRUE,value=TRUE)
 
 cat("Read file",fnode[1],"\n")
-nd = readLines(fnode[1])
+nd = readLines(fnode[1],skipNul=TRUE)
 nd = grep("^ *$",nd,value=TRUE,invert=TRUE)
 nflevg = getvar("NFLEVG",nd)
 nfplev = getvar("NFPLEV",nd)
@@ -236,7 +236,7 @@ vars:",head(fpnoms[-nv]),"...",fpnoms[nt],"\n")
 	for (i in seq(along=fpre)) {
 		if (length(fnode) > 1) {
 			cat("Read file",fnode[i+1],"\n")
-			nd = readLines(fnode[i+1])
+			nd = readLines(fnode[i+1],skipNul=TRUE)
 		}
 
 		cat("Parse FP norms, pattern",fpre[i],"\n")

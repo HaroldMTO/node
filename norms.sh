@@ -79,11 +79,11 @@ do
 		shift
 		;;
 	-spref)
-		spref="spref='$2'"
+		spref="spref=$2"
 		shift
 		;;
 	-gpref)
-		gpref="gpref='$2'"
+		gpref="gpref=$2"
 		shift
 		;;
 	-detail) suf=detail;;

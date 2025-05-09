@@ -44,7 +44,7 @@ leg = getarg("leg",args)
 fnode = grep("=",args,invert=TRUE,value=TRUE)
 
 cat("Read file",fnode[1],"\n")
-nd = readLines(fnode[1])
+nd = readLines(fnode[1],skipNul=TRUE)
 nd = grep("^ *$",nd,value=TRUE,invert=TRUE)
 nflevg = getvar("NFLEVG",nd)
 has.levels = getvar(".*NSPPR",nd) > 0
@@ -150,7 +150,7 @@ vars:",head(gpnoms[-nv]),"...",gpnoms[nv],"\n")
 	for (i in seq(along=gpre)) {
 		if (length(fnode) > 1) {
 			cat("Read file",fnode[i+1],"\n")
-			nd = readLines(fnode[i+1])
+			nd = readLines(fnode[i+1],skipNul=TRUE)
 		}
 
 		cat("Parse GP norms, pattern",gpre[i],"\n")

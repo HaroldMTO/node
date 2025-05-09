@@ -40,7 +40,7 @@ leg = getarg("leg",args)
 fnode = grep("=",args,invert=TRUE,value=TRUE)
 
 cat("Read file",fnode[1],"\n")
-nd = readLines(fnode[1])
+nd = readLines(fnode[1],skipNul=TRUE)
 nd = grep("^ *$",nd,value=TRUE,invert=TRUE)
 nflevg = getvar("NFLEVG",nd)
 has.levels = getvar(".*NSPPR",nd) > 0
@@ -106,7 +106,7 @@ spl = list(sp1)
 for (i in seq(along=spre)) {
 	if (length(fnode) > 1) {
 		cat("Read file",fnode[i+1],"\n")
-		nd = readLines(fnode[i+1])
+		nd = readLines(fnode[i+1],skipNul=TRUE)
 	}
 
 	cat("Parse spectral norms, pattern",spre[i],"\n")
