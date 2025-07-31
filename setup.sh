@@ -89,7 +89,7 @@ then
 	fin=$ftmp
 fi
 
-if ! grep -qiE '\-+ Set up' $fin
+if ! grep -qiE '\-* Set up ' $fin
 then
 	echo "Error: $fin is not a NODE file (no 'Set up...' content)" >&2
 	exit 1

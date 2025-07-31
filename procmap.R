@@ -25,7 +25,8 @@ longend = function(nd,ndglg)
 		nloeng = as.integer(gsub("\\( *-?\\d+ +(\\d+) +\\d+\\)","\\1",s))
 	} else {
 		is = grep("Set up transforms",nd)
-		ind = seq(ij+1,is-1)
+		is = is[is > ij]
+		ind = seq(ij+1,is[1]-1)
 		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
 		nloeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
 	}
@@ -39,14 +40,15 @@ longend = function(nd,ndglg)
 wavend = function(nd,ndglg)
 {
 	ij = grep("\\( *JGL,NMENG *\\)",nd)
+	is = grep("\\( *JM,(G\\w*%)?NDGLU *\\)|JGL/NLOEN/NMEN",nd)
 	if (length(ij) == 0) {
 		ij = grep("\\( *JGL,NLOENG,NMENG *\\)",nd)
-		is = grep("\\(JM,NDGLU\\)",nd)
+		is = is[is > ij]
 		ind = seq(ij+1,is-1)
 		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
 		nmeng = as.integer(gsub("\\( *-?\\d+ +\\d+ +(\\d+)\\)","\\1",s))
 	} else {
-		is = grep("\\( *JM,NDGLU *\\)",nd)
+		is = is[is > ij]
 		ind = seq(ij+1,is-1)
 		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
 		nmeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
@@ -58,11 +60,12 @@ wavend = function(nd,ndglg)
 
 specnb = function(nd)
 {
-	ij = grep("\\( *JM,NDGLU *\\)",nd)
-	is = grep("Set up distributed",nd)
+	ij = grep("\\( *JM,(G\\w*%)?NDGLU *\\)",nd)
+	is = grep("Set up distributed|S%ITHRESHOLD",nd)
+	is = is[is > ij]
 	ind = seq(ij+1,is-1)
-	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
-	ndglu = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
+	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+,? +\\d+\\)",nd[ind])))
+	ndglu = as.integer(gsub("\\( *-?\\d+,? +(\\d+)\\)","\\1",s))
 
 	ndglu
 }
@@ -81,14 +84,15 @@ wavenb = function(nd)
 specdis = function(nd)
 {
 	i1 = grep("^ *NUMPP\\> *$",nd)
-	i2 = grep("(MAXIMUM )?NUMBER OF THREADS",nd)
+	i2 = grep("(MAXIMUM )?NUMBER OF THREADS|^ *NALLMS *$",nd)
 	i2 = i2[i2 > i1]
 	ind = seq(i1+1,i2[1]-1)
 	numpp = intlines(nd[ind])
 
 	i1 = grep("^ *NPROCM *$",nd)
-	i2 = grep("^ *NFRSTLAT *$",nd)
-	ind = seq(i1+1,i2-1)
+	i2 = grep("^ *NFRSTLAT *$|Set arrays for",nd)
+	i2 = i2[i2 > i1]
+	ind = seq(i1+1,i2[1]-1)
 	nprocm = intlines(nd[ind])
 
 	i1 = grep("^ *NALLMS *$",nd)
@@ -98,24 +102,26 @@ specdis = function(nd)
 	nallms = intlines(nds)
 
 	i1 = grep("^ *MYLEVS *$",nd)
-	i2 = grep("^ *NUMLL *$",nd)
-	ind = seq(i1+1,i2-1)
+	i2 = grep("^ *(NUMLL|NPTRLL) *$",nd)
+	i2 = i2[i2 > i1]
+	ind = seq(i1+1,i2[1]-1)
 	mylevs = intlines(nd[ind])
 
 	i1 = grep("^ *NBSETLEV *$",nd)
-	i2 = grep("^ *MYLATS *$",nd)
-	ind = seq(i1+1,i2-1)
+	i2 = grep("^ *(MYLATS|NUMLL) *$",nd)
+	i2 = i2[i2 > i1]
+	ind = seq(i1+1,i2[1]-1)
 	nbsetlev = intlines(nd[ind])
 
-	i1 = grep("^ *(YDLAP%)?MYMS *$",nd)
-	i2 = grep("^ *(NASM0|YDLAP%NASN0|NALLMS) *$",nd)
+	i1 = grep("^ *(\\w+%)?MYMS *$",nd)
+	i2 = grep("^ *((\\w+%)?NAS[MN]0|NALLMS) *$",nd)
 	i2 = i2[i2 > i1]
 	ind = seq(i1+1,i2[1]-1)
 	myms = intlines(nd[ind])
 
 	i1 = grep("^ *EIGEN-VALUES OF THE LAPLACIAN",nd)
 	i2 = grep("^ *EIGEN-VALUES OF ITS INVERSE",nd)
-	i3 = grep("^ *((YDLAP%)?NASM0G|YDLEP%NESM0G):",nd)
+	i3 = grep("^ *((\\w+%)?N[AE]SM0G):",nd)
 	ind = seq(i1+1,i2-1)
 	rlapdi = numlines(nd[ind])
 
@@ -164,6 +170,8 @@ vfe = function(nd,nflevg,oper)
 silev = function(nd,nflevg)
 {
 	il = grep("^( *JLEV *=)? *\\d+ +SITLAF *=",nd)
+	ild = diff(il)
+	if (any(ild > 1)) il = il[seq(which(ild > 1)[1])]
 	if (length(il) > 0) {
 		ire = regexec(sprintf(" *\\d+ +SITLAF *= +(%s) +SIDPHI *= +(%s)",Gnum,Gnum),nd[il])
 	} else {
@@ -194,9 +202,9 @@ sihd = function(nd,nflevg,nsmax)
 	i1 = grep("\\<PDILEV",nd)
 	if (length(i1) == 0) return(NULL)
 
-	if (length(i1) == 1) {
+	if (length(i1) == 1 || diff(i1)[1] > nflevg) {
 		i2 = grep("SUE?HDVPN",nd)[1]
-		il = seq(i1+1,i2-1)
+		il = seq(i1[1]+1,i2-1)
 		pdi = numlines(nd[il])
 		pdis = rep(0,nflevg)
 	} else {
@@ -213,8 +221,8 @@ sihd = function(nd,nflevg,nsmax)
 		knshd = rep(nsmax,nflevg)
 	} else {
 		i2 = grep("^ *SUHDF",nd)
-		stopifnot(length(i1) == 1 && length(i2) == 1)
-		il = seq(i1+1,i2-1)
+		stopifnot(length(i2) > 0)
+		il = seq(i1[1]+1,i2[1]-1)
 		knshd = intlines(nd[il])
 	}
 
@@ -466,7 +474,7 @@ ask = hasx11 && interactive()
 if (! "png" %in% names(cargs)) cargs$png = "."
 
 nd = readLines(cargs$ficin)
-indg = grep("Set up model geometry",nd)
+indg = grep("Set up model geometry *$",nd)
 if (length(indg) > 1) {
 	cat("--> log is from OOPS, keep 1st part only\n")
 	nd = nd[1:indg[2]]
