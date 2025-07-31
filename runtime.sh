@@ -114,19 +114,19 @@ fi
 
 R --slave -f $node/runtime.R --args $fin $fin2 png=$png
 
-n=0
+nc=0
 {
-echo "<table><tr>"
-for fic in $(ls $png | grep anaguess_.+.png)
-do
-	[ $((n%2)) -eq 1 ] && echo "</tr>\n<tr>"
-	echo "<td><img src='$fic'/></td>"
-	n=$((n+1))
-done
-echo "</tr></table>"
+	echo "<table><tr>"
+	for fic in $(ls $png | grep anaguess_.+.png)
+	do
+		[ $nc -gt 0 -a $((nc%2)) -eq 0 ] && echo -e "</tr>\n<tr>"
+		echo "<td><img src=\"$fic\"/></td>"
+		nc=$((nc+1))
+	done
+	echo "</tr></table>"
 } > $png/anaguess.html
 
-[ $n -eq 0 ] && echo > $png/anaguess.html
+[ $nc -eq 0 ] && echo > $png/anaguess.html
 
 if [ -s $png/canari.txt ]
 then

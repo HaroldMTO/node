@@ -15,6 +15,7 @@ install:
 	make $B/norms.sh
 	make $B/setup.sh
 	make $B/runtime.sh
+	make $B/runtimes.sh
 	if git status >/dev/null 2>&1; then \
 		grep -q $(shell git log -1 --pretty=format:%h 2>/dev/null) $P/version || \
 			git log -1 --oneline >> $P/version; \
@@ -22,8 +23,8 @@ install:
 
 node:
 	mkdir -p $P
-	cp -pruv gpnorms.R spnorms.R fpnorms.R fpspnorms.R procmap.R runtime.R setup.html \
-		norms.html runtime.html $P
+	cp -pruv gpnorms.R spnorms.R fpnorms.R fpspnorms.R procmap.R runtime.R runtimes.R \
+		setup.html norms.html runtime.html runtimes.html $P
 
 $B/norms.sh: norms.sh
 	sed -re "s:node=.+:node=$P:" norms.sh > $B/norms.sh
@@ -36,3 +37,7 @@ $B/setup.sh: setup.sh
 $B/runtime.sh: runtime.sh
 	sed -re "s:node=.+:node=$P:" runtime.sh > $B/runtime.sh
 	chmod a+x $B/runtime.sh
+
+$B/runtimes.sh: runtimes.sh
+	sed -re "s:node=.+:node=$P:" runtimes.sh > $B/runtimes.sh
+	chmod a+x $B/runtimes.sh
