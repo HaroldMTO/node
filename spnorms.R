@@ -1,19 +1,11 @@
 library(mfnode)
 
-getarg = function(x,args)
-{
-	ind = grep(sprintf("\\<%s=",x),args)
-	if (length(ind) == 0) return(NULL)
-
-	val = sub(sprintf("\\<%s=",x),"",args[ind])
-	if (! nzchar(val)) return(val)
-
-	strsplit(val,split=":")[[1]]
-}
-
 args = commandArgs(trailingOnly=TRUE)
+largs = strsplit(args,split="=")
+cargs = lapply(largs,function(x) unlist(strsplit(x[-1],split=":")))
+names(cargs) = sapply(largs,function(x) x[1])
 
-hasx11 = is.null(getarg("png",args)) && capabilities("X11")
+hasx11 = is.null(cargs$png) && capabilities("X11")
 ask = hasx11 && interactive()
 if (hasx11) {
 	png = dev.off = function(...) return(invisible(NULL))
@@ -27,15 +19,15 @@ if (hasx11) {
 xaxis = data.frame(unit=c(1,60,3600,86400),label=sprintf("fc time (%s)",
 	c("s","mn","h","days")),mindiff=c(0,240,14400,6*86400),freq=c(6,1,6,1))
 
-pngd = getarg("png",args)
+pngd = cargs$png
 if (is.null(pngd)) pngd = "."
-lev = as.integer(getarg("lev",args))
+lev = as.integer(cargs$lev)
 if (is.null(lev)) lev = 0L
-hmin = as.numeric(getarg("hmin",args))
-hmax = as.numeric(getarg("hmax",args))
-spre = getarg("spre",args)
-spref = getarg("spref",args)
-leg = getarg("leg",args)
+hmin = as.numeric(cargs$hmin)
+hmax = as.numeric(cargs$hmax)
+spre = cargs$spre
+spref = cargs$spref
+leg = cargs$leg
 
 fnode = grep("=",args,invert=TRUE,value=TRUE)
 
@@ -93,6 +85,7 @@ istep = as.numeric(gsub("C(\\d+)","\\1.5",step))
 cat(". steps:",head(step[-length(step)]),"...",step[length(step)],"\n")
 if (nstop == 0 && dim(sp1)[1] > 1) cat("--> steps are events of the job\n")
 
+times = tstep*istep
 spnoms = dimnames(sp1)[[3]]
 
 if (length(fnode) > 1) {
@@ -120,7 +113,10 @@ for (i in seq(along=spre)) {
 	stopifnot(any(! is.na(indv)))
 
 	stepi = dimnames(spi)[[1]]
-	inds = match(step,stepi)
+	istepi = as.numeric(gsub("C(\\d+)","\\1.5",stepi))
+	tstepi = getvar("TSTEP",nd)
+	timesi = tstepi*istepi
+	inds = match(times,timesi)
 	stopifnot(any(! is.na(inds)))
 	spl[[i+1]] = spi[inds,,indv,drop=FALSE]
 }
@@ -142,9 +138,21 @@ if (length(stepc) > 0) {
 	sp1 = spl[[1]]
 }
 
+sps = NULL
+if ("ref" %in% names(cargs)) {
+	load(cargs$ref)
+	dd1 = as.Date(as.character(getvar("NINDAT",nd)),"%Y%m%d")+getvar("NSSSSS",nd)/86400
+	ddt = as.numeric(dd-dd1,units="secs")
+	indv = match(dimnames(sp1)[[3]],abbreviate(dimnames(sps)[[3]]))
+	if (any(! is.na(indv))) {
+		sps = sps[,,indv,drop=FALSE]
+	}	else {
+		sps = NULL
+	}
+}
+
 nf = length(spnoms)
 nt = dim(sp1)[1]
-times = tstep*istep
 
 if (length(lev) > 1) {
 	cat("Produce vertical profiles at start/mid/end of time\n")
@@ -203,7 +211,7 @@ if (length(lev) == 1) {
 	}
 
 	if (length(spl) > 1) {
-		con = file(sprintf("%s/spec.txt",pngd),"wt")
+		con = file(sprintf("%s/sp.txt",pngd),"wt")
 		for (i in seq(along=spl)[-1]) {
 			cat("\nNorm diff. tendency for patterns:",sprintf("'%s'",leg[(i-1):i]),"\n",
 				file=con)
@@ -227,6 +235,7 @@ if (length(lev) == 1) {
 	tfreq = xaxis$freq[iu]
 
 	ttime = times/tunit
+	if (! is.null(sps)) ddt = ddt/tunit
 
 	xlim = range(ttime)
 	if (length(hmin) == 1) xlim[1] = max(xlim[1],hmin*3600/tunit)
@@ -258,8 +267,17 @@ if (length(lev) == 1) {
 			y = sapply(spl,function(x) x[,1,j])
 			scal = 1/scale10(y)
 			if (! is.finite(scal) || .001 <= scal && scal < 1) scal = 1
-			plotmean(ttime,y,main=titre[j],leg,tunit,xlim=xlim,xlab=xlab,ylab=spnoms[j],
-				xaxp=xaxp,scale=scal)
+
+			ylim = NULL
+			if (! is.null(sps)) {
+				z = scal*sps[,1,j]
+				ylim = range(c(scal*y,z),na.rm=TRUE)
+			}
+
+			plotmean(ttime,y,main=titre[j],leg,tunit,xlim=xlim,ylim=ylim,xlab=xlab,
+				ylab=spnoms[j],xaxp=xaxp,scale=scal)
+
+			if (! is.null(sps)) lines(ddt,z,col="grey",lty=5)
 		}
 
 		dev.off()

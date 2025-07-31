@@ -14,6 +14,9 @@ getarg = function(x,args)
 }
 
 args = commandArgs(trailingOnly=TRUE)
+largs = strsplit(args,split="=")
+cargs = lapply(largs,function(x) unlist(strsplit(x[-1],split=":")))
+names(cargs) = sapply(largs,function(x) x[1])
 
 hasx11 = is.null(getarg("png",args)) && capabilities("X11")
 ask = hasx11 && interactive()
@@ -29,17 +32,17 @@ if (hasx11) {
 xaxis = data.frame(unit=c(1,60,3600,86400),label=sprintf("fc time (%s)",
 	c("s","mn","h","days")),mindiff=c(0,240,14400,6*86400),freq=c(6,1,6,1))
 
-pngd = getarg("png",args)
+pngd = cargs$png
 if (is.null(pngd)) pngd = "."
-lev = as.integer(getarg("lev",args))
+lev = as.integer(cargs$lev)
 if (is.null(lev)) lev = 0L
-hmin = as.numeric(getarg("hmin",args))
-hmax = as.numeric(getarg("hmax",args))
-ptype = getarg("type",args)
+ptype = cargs$type
 detail = regexpr("gp.+detail",ptype) > 0
-gpre = getarg("gpre",args)
-gpref = getarg("gpref",args)
-leg = getarg("leg",args)
+hmin = as.numeric(cargs$hmin)
+hmax = as.numeric(cargs$hmax)
+gpre = cargs$gpre
+gpref = cargs$gpref
+leg = cargs$leg
 
 fnode = grep("=",args,invert=TRUE,value=TRUE)
 
@@ -71,6 +74,7 @@ if (interactive()) browser()
 
 cat("Parse GP norms of type",ptype,"\n")
 if (is.null(gpref)) {
+	cat("--> reference RE null, set it to standard print (ie 'NORMS AT...')\n")
 	gpref = "NORMS AT (START|NSTEP|END) CNT4"
 	ind = grep(gpref,nd)
 	if (length(ind) == 0) gpref = ""
@@ -113,6 +117,8 @@ times = tstep*istep
 gpl = list(gp1)
 
 gpnoms = dimnames(gp1)[[4]]
+leg = sub("gpnorm +(gmv|gfl)?","",gpref)
+if (leg == gpref) leg = "t0"
 
 if (is.null(gpre) && length(fnode) == 1) {
 	leg = "GP"
@@ -139,12 +145,12 @@ vars:",head(gpnoms[-nv]),"...",gpnoms[nv],"\n")
 		cat("--> no mixed norms, quit\n")
 		quit("no")
 	}
-} else if (all(nzchar(gpre))) {
+} else if (length(fnode) > 1 || all(nzchar(gpre))) {
 	if (length(fnode) > 1) {
-		if (is.null(leg)) leg = sub(".*node\\.?","",fnode,ignore.case=TRUE)
+		leg = sub(".*node\\.?","",fnode,ignore.case=TRUE)
 		gpre = rep(gpref,length(fnode)-1)
-	} else if (is.null(leg)) {
-		leg = c("t0",sub("gpnorm +(gmv|gfl)?","",gpre))
+	} else {
+		leg = c(leg,sub("gpnorm +(gmv|gfl)?","",gpre))
 	}
 
 	for (i in seq(along=gpre)) {
@@ -184,7 +190,11 @@ vars:",head(gpnoms[-nv]),"...",gpnoms[nv],"\n")
 			stepi = dimnames(gpi)[[1]]
 		}
 
-		inds = match(step,stepi)
+		tstepi = getvar("TSTEP",nd)
+		istepi = as.numeric(gsub("C(\\d+)","\\1.5",stepi))
+		timesi = tstepi*istepi
+
+		inds = match(times,timesi)
 		if (all(is.na(inds))) next
 
 		gpl[[i+1]] = gpi[inds,,,indv,drop=FALSE]
@@ -193,6 +203,19 @@ vars:",head(gpnoms[-nv]),"...",gpnoms[nv],"\n")
 
 leg = leg[which(! sapply(gpl,is.null))]
 gpl = gpl[! sapply(gpl,is.null)]
+
+gps = NULL
+if ("ref" %in% names(cargs)) {
+	load(cargs$ref)
+	dd1 = as.Date(as.character(getvar("NINDAT",nd)),"%Y%m%d")+getvar("NSSSSS",nd)/86400
+	ddt = as.numeric(dd-dd1,units="secs")
+	indv = match(dimnames(gp1)[[4]],dimnames(gps)[[4]])
+	if (any(! is.na(indv))) {
+		gps = gps[,,,indv,drop=FALSE]
+	}	else {
+		gps = NULL
+	}
+}
 
 nf = length(gpnoms)
 nt = dim(gp1)[1]
@@ -283,6 +306,7 @@ if (length(lev) == 1) {
 	tfreq = xaxis$freq[iu]
 
 	ttime = times/tunit
+	if (! is.null(gps)) ddt = ddt/tunit
 
 	xlim = range(ttime)
 	if (length(hmin) == 1) xlim[1] = max(xlim[1],hmin*3600/tunit)
@@ -324,8 +348,17 @@ if (length(lev) == 1) {
 			il = which(apply(y,3,function(x) any(! is.na(x))))
 			scal = 1/scale10(y[,1,])
 			if (! is.finite(scal) || .001 <= scal && scal < 1) scal = 1
-			plotmean(ttime,y[,1,il],main=titre[j],leg[il],tunit,xlim=xlim,
+
+			ylim = NULL
+			if (! is.null(gps)) {
+				z = scal*gps[,1,1,j]
+				ylim = range(c(scal*y[,1,il],z),na.rm=TRUE)
+			}
+
+			plotmean(ttime,y[,1,il],main=titre[j],leg[il],tunit,xlim=xlim,ylim=ylim,
 				xlab=xlab,ylab=gpnoms[j],xaxp=xaxp,scale=scal,col=il)
+
+			if (! is.null(gps)) lines(ddt,z,col="grey",lty=5)
 
 			plotmnx(ttime,y,titre[j],xlim=xlim,xlab=xlab,ylab=gpnoms[j],xaxp=xaxp)
 

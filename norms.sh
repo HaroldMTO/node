@@ -12,7 +12,7 @@ Description:
 
 Usage:
 	norms.sh NODE1 NODE2... -o HTML [-lev (LEV|I1:I2:...)] [-detail] [-nogfl] [-nogmv] \
-[-noadiab] [-noslb2] [-nospt1] [-nogpt1] [-not1] [-opt OPTIONS] [-h]
+[-noadiab] [-noslb2] [-nospt1] [-nogpt1] [-not1] [-ref FILE] [-opt OPTIONS] [-h]
 
 Options:
 	NODE1, NODE2,...: NODE files containing SP and/or GP norms to plot (see Details)
@@ -24,6 +24,8 @@ profiles.
 	-detail: activate 'detailed' plots for gpnorm (graphics contain 4 plots instead of 2)
 	-nogfl,nogmv,...: deactivate plots for this kind of norms. SP norms cannot!
 	-nospt1/nogpt1/not1: deactivate plots for SP, GP or SP+GP norms at t1 (resp.)
+	-ref: use FILE (an R image of SP/GP norms) as a reference to plot in addition to NODE \
+file(s)
 	OPTIONS: options to pass to the R script, in the form key=value, separated by space \
 and with keys among hmin, hmax (see Options)
 	-h: print this help and exit normally
@@ -41,6 +43,8 @@ file is passed, plots show curves for all the norms printed.
 in form '-lev I1:I2:...', values are indicated by integer values, separated \
 with colon. These values indicate 'breaks', where group i contains levels from 1 to i, \
 but not belonging to preceding groups (ie groups do not overlap).
+	When option '-ref' is passed, FILE is an R image file to be loaded in R scripts. It \
+must load objects ddt, sps and gps. See runtimes.sh for more info.
 
 Options:
 	Options passed with argument '-opt' consist in 1 character string (-> use quotes) \
@@ -66,6 +70,7 @@ lev=0
 ropt=""
 spref=""
 gpref=""
+ref=""
 
 while [ $# -ne 0 ]
 do
@@ -95,6 +100,10 @@ do
 	-nospt1) norms=$(echo $norms | sed -re 's:spt1::');;
 	-nogpt1) norms=$(echo $norms | sed -re 's:gpt1::');;
 	-not1) norms=$(echo $norms | sed -re 's:[sg]pt1::g');;
+	-ref)
+		ref=$2
+		shift
+		;;
 	-opt)
 		ropt=$2
 		shift
@@ -154,6 +163,8 @@ mkdir -p $dd
 echo "--> output sent to $dd"
 
 grep -q 'END CNT0' $fin || echo "Warning: no 'END CNT0', program may crash" >&2
+
+[ -n "$ref" ] && ropt="$ropt ref=$ref"
 
 echo "SP norms for SPEC"
 spre=""
@@ -237,36 +248,35 @@ for pre in sp gpgmv$suf gpgfl$suf gpadiab$suf gpsi$suf fp$suf fpsp \
 	gflspec$suf fpgp$suf fpspec
 do
 	echo "HTML files for $pre"
+	{
+	echo "<table>"
 	for s in "" v
 	do
 		echo "<tr>"
 
-		n=0
+		nc=0
 		# split lists in 2 so that 1...9 and 10... remain ordered
 		for ficp in $(ls -1 $dd | grep -E "^${pre}norm$s[[:digit:]]\.png") \
 			$(ls -1 $dd | grep -E "^${pre}norm$s[[:digit:]]{2,}\.png")
 		do
-			if [ $n -eq 2 ]
-			then
-				echo -e "</tr>\n<tr>\n"
-				n=0
-			fi
-
-			n=$((n+1))
-			printf "\t<td><img src=\"%s\"/></td>\n" $dd/$ficp
+			[ $nc -gt 0 -a $((nc%2)) -eq 0 ] && echo -e "</tr>\n<tr>"
+			echo -e "\t<td><img src=\"$dd/$ficp\"/></td>"
+			nc=$((nc+1))
 		done
 
-		if [ -s $dd/$pre$s.txt ]
-		then
-			echo -e "\t<td><pre>\n"
-			cat $dd/$pre$s.txt
-			echo "</pre></td>"
-		fi
-
 		echo "</tr>"
-	done > $temp/$pre.html
+	done
+	echo "</table>"
+	} > $temp/$pre.html
 
-	[ $(wc -l $temp/$pre.html | awk '{print $1}') -le 2 ] && echo > $temp/$pre.html
+	if [ -s $dd/$pre.txt ]
+	then
+		echo "<pre>"
+		cat $dd/$pre.txt
+		echo "</pre>"
+	fi >> $temp/$pre.html
+
+	[ $(wc -l $temp/$pre.html | awk '{print $1}') -le 4 ] && echo > $temp/$pre.html
 done
 
 echo "Adding thematic HTML files from $temp"
