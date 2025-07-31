@@ -250,6 +250,8 @@ cuico = function(nd,nflevg)
 	snum = "-?\\d+\\.\\d+"
 
 	ind = grep("JLEV +VCUICO\\>(\\(1)?",nd)
+	if (length(ind) == 0) return(NULL)
+
 	if (length(ind) == 1) {
 		indi = ind+seq(nflevg-3)
 		ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s) +(%s)",snum,snum,snum,snum),nd[indi])
@@ -285,6 +287,8 @@ mesodrag = function(nd,nflevg)
 	snum = "-?\\d+\\.\\d+"
 
 	id = grep("PROFIL VERTICAL DE DRAG MESO",nd)
+	if (length(id) == 0) return(NULL)
+	id = id[1]
 	ind = seq(id+2,id+1+nflevg)
 	m = matrix(numlines(nd[ind]),nr=6)
 	gwd = as.data.frame(t(m))
@@ -462,6 +466,11 @@ ask = hasx11 && interactive()
 if (! "png" %in% names(cargs)) cargs$png = "."
 
 nd = readLines(cargs$ficin)
+indg = grep("Set up model geometry",nd)
+if (length(indg) > 1) {
+	cat("--> log is from OOPS, keep 1st part only\n")
+	nd = nd[1:indg[2]]
+}
 
 cat("Grid information\n")
 nproc = getvar("NPROC",nd)
@@ -738,7 +747,7 @@ cat("Vertical cubic weights (SL)\n")
 vintw = cuico(nd,nflevg)
 
 pngalt(sprintf("%s/vintw.png",cargs$png))
-if (any(! is.na(vintw))) {
+if (! is.null(vintw)) {
 	op = par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	nl3 = nflevg-3
 	ntop = min(nl3,5)
@@ -822,14 +831,16 @@ SL comms for MPI task",sub(" *MYPROC += +(\\d+).*","\\1",nd[ip[1]]),":",icomm,"\
 cat("Vertical mesoscale drag\n")
 gwd = mesodrag(nd,nflevg)
 pngalt(sprintf("%s/mesodrag.png",cargs$png))
-op = par(mfrow=c(1,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-ylim = c(nflevg,1)
-plot(gwd$u,1:nflevg,type="o",lty=1,pch="-",main="Mesoscale drag",
-	xlab="Wind speed",ylab="Level",ylim=ylim,cex=1.5)
-abline(v=0,col="grey")
-plot(gwd$t,1:nflevg,type="o",lty=1,pch="-",main="Mesoscale drag",
-	xlab="Temperature",ylab="Level",ylim=ylim,cex=1.5)
-abline(v=0,col="grey")
+if (! is.null(gwd)) {
+	op = par(mfrow=c(1,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	ylim = c(nflevg,1)
+	plot(gwd$u,1:nflevg,type="o",lty=1,pch="-",main="Mesoscale drag",
+		xlab="Wind speed",ylab="Level",ylim=ylim,cex=1.5)
+	abline(v=0,col="grey")
+	plot(gwd$t,1:nflevg,type="o",lty=1,pch="-",main="Mesoscale drag",
+		xlab="Temperature",ylab="Level",ylim=ylim,cex=1.5)
+	abline(v=0,col="grey")
+}
 pngoff()
 
 if (nsttyp == 2) {
@@ -843,5 +854,6 @@ if (nsttyp == 2) {
 	map("world",xlim=xlim,ylim=ylim)
 	points(xp,yp,pch="+",col="red")
 	text(xp,yp,sprintf("pole (lat/long): %.3g %.3g",yp,xp),pos=3,col="red")
+	box()
 	pngoff()
 }
