@@ -76,6 +76,16 @@ do
 	ls -L $f > /dev/null
 done
 
+loc=$(dirname $fout)
+
+# set png before changing fin (potentialy)
+if basename $fin | grep -qEi '^node\.?\w+.*'
+then
+	png=$loc/$(basename $fin | sed -re 's:^node\.?(\w+.*):\1:i')
+else
+	png=$(mktemp -p $loc -d runtimeXXX)
+fi
+
 if ! file -L $fin | grep -q text
 then
 	ftmp=$(mktemp --tmpdir)
@@ -88,15 +98,6 @@ then
 	fi
 
 	fin=$ftmp
-fi
-
-loc=$(dirname $fout)
-
-if echo $fin | grep -qEi '(.+/)?\<node\.?\w+'
-then
-	png=$loc/$(echo $fin | sed -re 's:(.+/)?\<node\.?(\w+):\2:i')
-else
-	png=$(mktemp -t $loc -d runtimeXXX)
 fi
 
 png=$(echo $png | sed -re 's:^\./::')

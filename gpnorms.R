@@ -77,7 +77,10 @@ if (is.null(gpref)) {
 	cat("--> reference RE null, set it to standard print (ie 'NORMS AT...')\n")
 	gpref = "NORMS AT (START|NSTEP|END) CNT4"
 	ind = grep(gpref,nd)
-	if (length(ind) == 0) gpref = ""
+	if (length(ind) < 3) {
+		cat("--> too few norms, set reference RE to empty string\n")
+		gpref = ""
+	}
 }
 
 if (regexpr("gfl",ptype) > 0) {

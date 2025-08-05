@@ -95,7 +95,7 @@ do
 	shift
 done
 
-[ -n "$fout" ] || fout=runtimes.sh
+[ -n "$fout" ] || fout=runtimes.html
 
 if [ -z "$path" -o -z "$patt" -o -z "$png" -o -z "$fout" ]
 then
@@ -130,17 +130,18 @@ ropt=""
 
 R --slave -f $node/runtimes.R --args path=$path patt=$patt png=$png $ropt
 
-nc=0
-{
+for pre in sp gp
+do
+	nc=0
 	echo "<tr>"
-	for fic in $png/*.png
+	for fic in $(ls -1 $png | grep -E "${pre}norm.+\.png")
 	do
 		[ $nc -gt 0 -a $((nc%2)) -eq 0 ] && echo -e "</tr>\n<tr>"
-		echo "<td><img src='$fic'/></td>"
+		echo "<td><img src='$png/$fic'/></td>"
 		nc=$((nc+1))
 	done
 	echo "</tr>"
-} > $png/img.html
+done > $png/img.html
 
 path_=$(echo $path | sed -e 's/:/_/g')
 sed -re "s:TAG PATH:$path_:" -e "s:TAG PATT:$patt:" -e "s:TAG DIR:$png:g" \

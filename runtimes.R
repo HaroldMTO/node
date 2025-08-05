@@ -56,7 +56,7 @@ jacs = array(dim=c(nf,3,4))
 nomg = c("Ritz1","Ritz2","gradient","J")
 grads = array(dim=c(nf,3,4))
 sps = gps = NULL
-
+rts = rtx = numeric(nf)
 ij2 = 6
 ig2 = 10
 
@@ -65,7 +65,7 @@ if (interactive()) browser()
 spref = "NORMS AT (START|NSTEP|END) CNT4"
 
 for (i in seq(nf)) {
-	nd = readLines(fnode[i])
+	nd = readLines(fnode[i],skipNul=TRUE)
 	ind = grep("GREPCOST - ITER",nd)
 	if (length(ind) > 1) {
 		jacob = t(matrix(numlines(nd[ind]),ncol=length(ind)))
@@ -109,11 +109,27 @@ for (i in seq(nf)) {
 
 		gps[i,,,] = gpn[1,,,]
 	}
+
+	rt = runtime(nd)
+	rts[i] = as.numeric(rt$wall[dim(rt)[1]]-attr(rt,"start"),units="secs") %% 86400
+	rtx[i] = as.numeric(max(rt$dwall),units="secs")
 }
 
 if ("save" %in% names(cargs)) {
 	cat("Save GP/SP norms in",cargs$save,"\n")
 	save(dd,sps,gps,file=cargs$save)
+}
+
+if (any(! is.na(rts))) {
+	png(sprintf("%s/rts.png",cargs$png))
+	par(mfrow=c(2,1),mgp=c(2,1,0))
+	plot(dd,rts,type="o",main="Elapsed time",pch=20,xlab="Date",ylab="Time (s)",xaxt="n")
+	axis.Date(1,dd)
+
+	plot(dd,rtx,type="o",main="Max wall-time of steps",pch=20,xlab="Date",ylab="Time (s)",
+		xaxt="n")
+	axis.Date(1,dd)
+	dev.off()
 }
 
 if (any(! is.na(jacs))) {
@@ -122,7 +138,7 @@ if (any(! is.na(jacs))) {
 	tt = "Iter 1, 6 and last one"
 	par(mfrow=c(2,2),mgp=c(2,1,0))
 	for (i in seq(along=nomj)) {
-		matplot(dd,jacs[,,i],type="o",main=c(nomj[i],tt),xlab="date",ylab=nomj[i],lty=1:3,
+		matplot(dd,jacs[,,i],type="o",main=c(nomj[i],tt),xlab="Date",ylab=nomj[i],lty=1:3,
 			col=1,pch=20,cex=.7,xaxt="n")
 		axis.Date(1,dd)
 		#legend("topleft",legend=c("1st","last"),col=1:2,lty=1,pch=20,bg="transparent")
@@ -137,7 +153,7 @@ if (any(! is.na(grads))) {
 	tt = "Iter 1, 10 and last one"
 	par(mfrow=c(2,2),mgp=c(2,1,0))
 	for (i in seq(along=nomg)) {
-		matplot(dd,grads[,,i],type="o",main=c(nomg[i],tt),xlab="date",ylab=nomg[i],lty=1:3,
+		matplot(dd,grads[,,i],type="o",main=c(nomg[i],tt),xlab="Date",ylab=nomg[i],lty=1:3,
 			col=1,pch=20,cex=.7,xaxt="n")
 		axis.Date(1,dd)
 	}
@@ -164,7 +180,7 @@ if (! is.null(sps)) {
 
 		for (j in 1:min(nv-nj*i,nj)+nj*i) {
 			cat(". SP field",spnoms[j],"\n")
-			plot(dd,sps[,,j],type="o",main=tt[j],xlab="date",ylab=spnoms[j],lty=1,
+			plot(dd,sps[,,j],type="o",main=tt[j],xlab="Date",ylab=spnoms[j],lty=1,
 				col=1,pch=20,cex=.7,xaxt="n")
 			axis.Date(1,dd)
 		}

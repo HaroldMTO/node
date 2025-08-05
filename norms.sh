@@ -130,20 +130,33 @@ fout: '$fout'
 fi
 
 ls -L $fin > /dev/null
-file -L $fin | grep -q text
 
-temp=$(mktemp -d -t plotXXX)
+temp=$(mktemp -d -t normsXXX)
 
 trap 'rm -r $temp' 0
 
+# set png before changing fin (potentialy)
+loc=$(dirname $fout)
+png=$loc/$(basename $fin | sed -re 's:^node\.?(\w+.*):\1:i')
+echo $png | grep -qE '(.+/)?001_01$' && png=$loc/$(basename $fout .html)
+png=$(echo $png | sed -re 's:^\./::')
+
 if ! file -L $fin | grep -qE "(ASCII|UTF-8 Unicode) text"
 then
-	echo "Error: $fin is not a text file" >&2
-	exit 1
+	ftmp=$(mktemp --tmpdir)
+	cat $fin | tr -d '\0' > $ftmp
+
+	if ! file -L $ftmp | grep -q text
+	then
+		echo "Error: $fin is not a text file" >&2
+		exit 1
+	fi
+
+	fin=$ftmp
 elif ! grep -qEi '^ \w+:\w+:\w+ +STEP +[0-9]+' $fin
 then
 	echo "Warning: no 'STEP...' in $fin" >&2
-	#exit 1
+	exit 1
 fi
 
 type R >/dev/null 2>&1 || module -s load intel R >/dev/null 2>&1
@@ -155,12 +168,8 @@ else
 	R_LIBS=$R_LIBS:~petithommeh/lib
 fi
 
-loc=$(dirname $fout)
-dd=$loc/$(echo $fin | sed -re 's:^(.+/)?node\.?(\w+):\2:i')
-echo $dd | grep -qE '(.+/)?001_01$' && dd=$loc/$(basename $fout .html)
-dd=$(echo $dd | sed -re 's:^\./::')
-mkdir -p $dd
-echo "--> output sent to $dd"
+mkdir -p $png
+echo "--> output sent to $png"
 
 grep -q 'END CNT0' $fin || echo "Warning: no 'END CNT0', program may crash" >&2
 
@@ -170,7 +179,7 @@ echo "SP norms for SPEC"
 spre=""
 st1="spnorm t1"
 echo $norms | grep -q spt1 && spre="$st1 *tr(ansdir)?:$st1 *si:$st1 spcm"
-R --slave -f $node/spnorms.R --args $fin $fin2 lev=$lev $spref spre="$spre" png=$dd $ropt
+R --slave -f $node/spnorms.R --args $fin $fin2 lev=$lev $spref spre="$spre" png=$png $ropt
 
 if echo $norms | grep -q gfl
 then
@@ -179,12 +188,12 @@ then
 	gt1="gpnorm gflt1"
 	echo $norms | grep -q gpt1 && gpre="$gt1 (call_)?sl$:$gt1 slmf:$gt1 (cpg)?lag:$gpre"
 	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev $gpref type=gpgfl$suf \
-		gpre="$gpre" png=$dd $ropt
+		gpre="$gpre" png=$png $ropt
 
 	if [ -z "$fin2" ]
 	then
 		echo "GP norms for GFL+SPEC"
-		R --slave -f $node/gpnorms.R --args $fin lev=$lev type=gflspec$suf png=$dd $ropt
+		R --slave -f $node/gpnorms.R --args $fin lev=$lev type=gflspec$suf png=$png $ropt
 	fi
 fi
 
@@ -195,21 +204,21 @@ then
 	gt1="gpnorm gmvt1"
 	echo $norms | grep -q gpt1 && gpre="$gt1 sl:$gt1 slmf:$gt1 cpglag"
 	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev type=gpgmv$suf \
-		gpref="gpnorm gmvt0" gpre="$gpre" png=$dd $ropt
+		gpref="gpnorm gmvt0" gpre="$gpre" png=$png $ropt
 fi
 
 if grep -iqE "gpnorm adiab call_sl" $fin && echo $norms | grep -q adiab
 then
 	echo "GP norms for ADIAB"
 	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev type=gpadiab$suf \
-		gpref="gpnorm adiab call_sl" gpre="gpnorm adiab cpg" png=$dd $ropt
+		gpref="gpnorm adiab call_sl" gpre="gpnorm adiab cpg" png=$png $ropt
 fi
 
 if grep -iqE "gpnorm zb2 cpg$" $fin && echo $norms | grep -q slb2
 then
 	echo "GP norms for ZB2"
 	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev type=gpsi$suf \
-		gpref="gpnorm zb2 cpg$" gpre="gpnorm zb2 (call_)?sl$:gpnorm zb2 slmf" png=$dd \
+		gpref="gpnorm zb2 cpg$" gpre="gpnorm zb2 (call_)?sl$:gpnorm zb2 slmf" png=$png \
 		$ropt
 fi
 
@@ -220,14 +229,14 @@ then
 		echo "GP norms for FullPOS"
 		fpre="gpnorm dynfpos di:gpnorm dynfposlag:gpnorm endvpos z:gpnorm endvpos fp:allfpos"
 		R --slave -f $node/fpnorms.R --args $fin $fin2 lev=$lev type=fp$suf \
-			fpref="gpnorm dynfpos z" fpre="$fpre" png=$dd $ropt
+			fpref="gpnorm dynfpos z" fpre="$fpre" png=$png $ropt
 	fi
 
 	if [ -z "$fin2" ] && grep -iq "allfpos" $fin
 	then
 		echo "GP norms for FullPOS+SPEC+GFL"
 		R --slave -f $node/fpnorms.R --args $fin lev=$lev type=fpgp$suf fpref="allfpos" \
-			png=$dd $ropt
+			png=$png $ropt
 	fi
 fi
 
@@ -235,12 +244,12 @@ if grep -iqE "FULL-POS SPNORMS" $fin && echo $norms | grep -q fp
 then
 	echo "SP norms for FullPOS"
 	R --slave -f $node/fpspnorms.R --args $fin $fin2 lev=$lev type=fpsp \
-		fpref="full-pos spnorms" fpre="xxxyyyzzz" png=$dd $ropt
+		fpref="full-pos spnorms" fpre="xxxyyyzzz" png=$png $ropt
 
 	if [ -z "$fin2" ]
 	then
 		echo "SP norms for FullPOS+SPEC"
-		R --slave -f $node/fpspnorms.R --args $fin lev=$lev type=fpspec png=$dd $ropt
+		R --slave -f $node/fpspnorms.R --args $fin lev=$lev type=fpspec png=$png $ropt
 	fi
 fi
 
@@ -256,11 +265,11 @@ do
 
 		nc=0
 		# split lists in 2 so that 1...9 and 10... remain ordered
-		for ficp in $(ls -1 $dd | grep -E "^${pre}norm$s[[:digit:]]\.png") \
-			$(ls -1 $dd | grep -E "^${pre}norm$s[[:digit:]]{2,}\.png")
+		for ficp in $(ls -1 $png | grep -E "^${pre}norm$s[[:digit:]]\.png") \
+			$(ls -1 $png | grep -E "^${pre}norm$s[[:digit:]]{2,}\.png")
 		do
 			[ $nc -gt 0 -a $((nc%2)) -eq 0 ] && echo -e "</tr>\n<tr>"
-			echo -e "\t<td><img src=\"$dd/$ficp\"/></td>"
+			echo -e "\t<td><img src=\"$png/$ficp\"/></td>"
 			nc=$((nc+1))
 		done
 
@@ -269,10 +278,10 @@ do
 	echo "</table>"
 	} > $temp/$pre.html
 
-	if [ -s $dd/$pre.txt ]
+	if [ -s $png/$pre.txt ]
 	then
 		echo "<pre>"
-		cat $dd/$pre.txt
+		cat $png/$pre.txt
 		echo "</pre>"
 	fi >> $temp/$pre.html
 

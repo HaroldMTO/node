@@ -735,13 +735,39 @@ if (! is.null(rt)) {
 			rts = sapply(c(list(rt),rts),art,simplify="array")
 		}
 
-		pas = c(1,2,3,5,6,10,15,20,40,50)
-		nt = c(0,200,400,600,1200,2000,3000,4000,8000,10000)
-		it = findInterval(nts,nt)
+		# radiation, if any
+		s = grep("LMPHYS *=",nd,value=TRUE)
+		lmphys = as.logical(sub(".*\\<LMPHYS *= *([TF]).+","\\1",s))
+		nradfr = getvar("NRADFR",nd)
+		if (is.null(nradfr)) nradfr = 1
+		itr = seq(1,nts,by=nradfr)
+
+		# hours (for IO)
+		tstep = getvar("TSTEP",nd)
+		nth = 3600/tstep
+		if (as.integer(nth) != nth) nth = 3*3600/tstep
+		if (as.integer(nth) != nth) nth = 6*3600/tstep
+		if (as.integer(nth) == nth) {
+			ith1 = seq(1,nts,by=nth)
+			ith = ith1
+			if (length(ith) > 30) ith = seq(1,nts,by=3*nth)
+			if (length(ith) > 30) ith = seq(1,nts,by=6*nth)
+			if (length(ith) > 30) ith = seq(1,nts,by=12*nth)
+			if (length(ith) > 30) ith = seq(1,nts,by=24*nth)
+			if (length(ith) > 30) ith = seq(1,nts,by=48*nth)
+		}
+
+		if (nts < 100) {
+			its = seq(nts)
+		} else {
+			pas = c(1,2,3,5,7,11,17,23,41)
+			nt = c(0,200,500,800,1500,2500,4000,8000,10000)
+			it = findInterval(nts,nt)
+			its = unique(sort(c(ith1,seq(1,nts,by=pas[it]))))
+		}
 
 		png(sprintf("%s/runtime.png",cargs$png))
 		par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-		its = seq(1,nts,by=pas[it])
 		if (length(fnode) > 1) {
 			matplot(its-1,rts[its,2,],type="h",lty=1,main=c("Wall-time",tt),xlab="Time-step",
 				ylab="Time (s)")
@@ -751,8 +777,59 @@ if (! is.null(rt)) {
 			legend("topleft",leg,lty=1)
 		} else {
 			plot(its-1,rt$dwall[its],type="h",main=c("Wall-time",tt),xlab="Time-step",
-				ylab="Time (s)")
+				ylab="Time (s)",col="grey10")
+			if (nth > 1) {
+				points(ith-1,rt$dwall[ith],type="h",col="blue1")
+				#rug(ith-1,side=3,col="blue1")
+				mtext((ith-1)*tstep/3600,3,-.8,at=ith-1,cex=.8,col="blue1")
+			}
+
+			if (lmphys && length(itr) > 1) {
+				points(itr-1,rt$dwall[itr],type="h",col="red3")
+			}
+
 			plot(its-1,rt$cpu[its],type="h",main="CPU-time",xlab="Time-step",ylab="Time (s)")
+		}
+
+		dev.off()
+
+		its = seq(nts)
+		its = its[tstep/3600*(its-1) <= 12]
+		itr = itr[tstep/3600*(itr-1) <= 12]
+
+		nth = 3600/tstep
+		if (as.integer(nth) != nth) nth = 3*3600/tstep
+		if (as.integer(nth) == nth) {
+			ith = ith1
+			if (length(ith) > 30) ith = seq(1,nts,by=3*nth)
+		}
+
+		ith = ith[tstep/3600*(ith-1) <= 12]
+
+		png(sprintf("%s/runtimez.png",cargs$png))
+		par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+		if (length(fnode) > 1) {
+			matplot(its-1,rts[its,2,],type="h",lty=1,main=c("Wall-time - zoom [0,12h]",tt),
+				xlab="Time-step",ylab="Time (s)")
+			legend("topleft",leg,lty=1)
+			matplot(its-1,rts[its,3,],type="h",lty=1,main="CPU-time",xlab="Time-step",
+				ylab="Time (s)")
+			legend("topleft",leg,lty=1)
+		} else {
+			plot(its-1,rt$dwall[its],type="h",main=c("Wall-time - zoom [0,12h]",tt),
+				xlab="Time-step",ylab="Time (s)",col="grey10")
+			if (length(ith) > 1) {
+				points(ith-1,rt$dwall[ith],type="h",col="blue1")
+				#rug(ith-1,side=3,col="blue1")
+				mtext((ith-1)*tstep/3600,3,-.8,at=ith-1,cex=.8,col="blue1")
+			}
+
+			if (lmphys && length(itr) > 1) {
+				points(itr-1,rt$dwall[itr],type="h",col="red3")
+			}
+
+			plot(its-1,rt$cpu[its],type="h",main="CPU-time - zoom [0,12h]",xlab="Time-step",
+				ylab="Time (s)")
 		}
 
 		dev.off()
