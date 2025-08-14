@@ -719,6 +719,7 @@ if (! is.null(lh)) {
 
 cat("Run-time information\n")
 rt = runtime(nd)
+rts = NULL
 if (! is.null(rt)) {
 	nts = dim(rt)[1]
 
@@ -731,16 +732,15 @@ if (! is.null(rt)) {
 	if (nts > 1) {
 		if (length(fnode) > 1) {
 			rts = lapply(nds,runtime)
-			art = function(rt) sapply(rt,as.numeric,simplify="array")
-			rts = sapply(c(list(rt),rts),art,simplify="array")
+			#art = function(rt) sapply(rt,as.numeric,simplify="array")
+			#rts = sapply(c(list(rt),rts),art,simplify="array")
 		}
 
 		# radiation, if any
-		s = grep("LMPHYS *=",nd,value=TRUE)
-		lmphys = as.logical(sub(".*\\<LMPHYS *= *([TF]).+","\\1",s))
-		nradfr = getvar("NRADFR",nd)
-		if (is.null(nradfr)) nradfr = 1
-		itr = seq(1,nts,by=nradfr)
+		s = grep("L[EM]PHYS *=",nd,value=TRUE)
+		lphys = any(as.logical(sub(".*\\<L[EM]PHYS *= *([TF]).+","\\1",s)))
+		itr = NULL
+		if (lphys) itr = attr(rt,"tsrad")
 
 		# hours (for IO)
 		tstep = getvar("TSTEP",nd)
@@ -748,7 +748,7 @@ if (! is.null(rt)) {
 		if (as.integer(nth) != nth) nth = 3*3600/tstep
 		if (as.integer(nth) != nth) nth = 6*3600/tstep
 		if (as.integer(nth) == nth) {
-			ith1 = seq(1,nts,by=nth)
+			ith1 = attr(rt,"tshours")
 			ith = ith1
 			if (length(ith) > 30) ith = seq(1,nts,by=3*nth)
 			if (length(ith) > 30) ith = seq(1,nts,by=6*nth)
@@ -766,72 +766,89 @@ if (! is.null(rt)) {
 			its = unique(sort(c(ith1,seq(1,nts,by=pas[it]))))
 		}
 
+		if (nts > 1) {
+			tsm = round(tint/(nts-1),3)
+			cat("Mean time of forecast steps:",tsm,"(s)\n")
+		}
+
 		png(sprintf("%s/runtime.png",cargs$png))
 		par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-		if (length(fnode) > 1) {
-			matplot(its-1,rts[its,2,],type="h",lty=1,main=c("Wall-time",tt),xlab="Time-step",
-				ylab="Time (s)")
-			legend("topleft",leg,lty=1)
-			matplot(its-1,rts[its,3,],type="h",lty=1,main="CPU-time",xlab="Time-step",
-				ylab="Time (s)")
-			legend("topleft",leg,lty=1)
-		} else {
-			plot(its-1,rt$dwall[its],type="h",main=c("Wall-time",tt),xlab="Time-step",
-				ylab="Time (s)",col="grey10")
-			if (nth > 1) {
-				points(ith-1,rt$dwall[ith],type="h",col="blue1")
-				#rug(ith-1,side=3,col="blue1")
-				mtext((ith-1)*tstep/3600,3,-.8,at=ith-1,cex=.8,col="blue1")
-			}
-
-			if (lmphys && length(itr) > 1) {
-				points(itr-1,rt$dwall[itr],type="h",col="red3")
-			}
-
-			plot(its-1,rt$cpu[its],type="h",main="CPU-time",xlab="Time-step",ylab="Time (s)")
+		plot(its-1,rt$dwall[its],type="h",main=c("Wall-time",tt),xlab="Time-step",
+			ylab="Time (s)",col="grey10")
+		if (nth > 1) {
+			points(ith-1,rt$dwall[ith],type="h",col="blue1")
+			mtext((ith-1)*tstep/3600,3,-.8,at=ith-1,cex=.75,col="blue1")
 		}
+
+		if (length(itr) > 1) points(itr-1,rt$dwall[itr],type="h",col="red3")
+
+		start = attr(rt,"start")
+		xlab = sprintf("Time since start (=%s) (s)",attr(rt,"start-time"))
+
+		y = seq(dim(rt)[1])-1
+		reg = line(rt$wall-start,y)
+		tt = sprintf("mean pace: %g steps/s (%d steps in %gs)",round(coef(reg)[2],1),
+			nts,round(total))
+		plot(rt$wall-start,y,type="l",main=c("Forecast time",tt),xlab=xlab,
+			ylab="Time-step",xaxt="n",xaxs="i",yaxs="i")
+		xs = pretty((rt$wall-start)/60)*60
+		axis(1,xs)
+		abline(reg,lty=2,col="grey")
+		ith0 = ith[-1]
+		if (length(ith0) > 10) ith0 = ith[seq(1,length(ith),by=2)[-1]]
+		if (length(ith0) > 0) {
+			h = (ith0-1)*tstep/3600
+			mtext(h,2,at=ith0-1,cex=.75,col="blue1",adj=0,las=2)
+			segments(rt$wall[ith0]-start,0,y1=ith0-1,col="grey",lty=2)
+			segments(0,ith0-1,rt$wall[ith0]-start,col="grey",lty=2)
+		}
+
+		for (i in seq(along=rts)) {
+			starti = attr(rts[[i]],"start")
+			if (start < starti && starti < start+total) {
+				lines(rts[[i]]$wall-start,seq(dim(rts[[i]])[1])-1,col=i+1)
+			} else {
+				lines(rts[[i]]$wall-starti,seq(dim(rts[[i]])[1])-1,col=i+1)
+			}
+		}
+
+		legend("topleft",leg,col=seq(along=leg),lty=1,inset=c(.05,.02))
 
 		dev.off()
 
 		its = seq(nts)
-		its = its[tstep/3600*(its-1) <= 12]
-		itr = itr[tstep/3600*(itr-1) <= 12]
-
-		nth = 3600/tstep
-		if (as.integer(nth) != nth) nth = 3*3600/tstep
-		if (as.integer(nth) == nth) {
-			ith = ith1
-			if (length(ith) > 30) ith = seq(1,nts,by=3*nth)
+		h = 12
+		its = its[tstep/3600*(its-1) <= h]
+		itr = itr[tstep/3600*(itr-1) <= h]
+		if (length(its) > 200) {
+			h = 6
+			its = its[tstep/3600*(its-1) <= h]
+			itr = itr[tstep/3600*(itr-1) <= h]
 		}
 
-		ith = ith[tstep/3600*(ith-1) <= 12]
+		if (length(its) > 1 && length(its) < nts%/%2) {
+			nth = 3600/tstep
+			if (as.integer(nth) != nth) nth = 3*3600/tstep
+			if (as.integer(nth) == nth) {
+				ith = ith1
+				if (length(ith) > 30) ith = seq(1,nts,by=3*nth)
+			}
 
-		png(sprintf("%s/runtimez.png",cargs$png))
-		par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-		if (length(fnode) > 1) {
-			matplot(its-1,rts[its,2,],type="h",lty=1,main=c("Wall-time - zoom [0,12h]",tt),
-				xlab="Time-step",ylab="Time (s)")
-			legend("topleft",leg,lty=1)
-			matplot(its-1,rts[its,3,],type="h",lty=1,main="CPU-time",xlab="Time-step",
-				ylab="Time (s)")
-			legend("topleft",leg,lty=1)
-		} else {
-			plot(its-1,rt$dwall[its],type="h",main=c("Wall-time - zoom [0,12h]",tt),
+			ith = ith[tstep/3600*(ith-1) <= 12]
+
+			png(sprintf("%s/runtimez.png",cargs$png))
+			par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+			tt0 = sprintf("Wall-time - zoom [0,%dh]",as.integer(h))
+			plot(its-1,rt$dwall[its],type="h",main=c(tt0,tt),
 				xlab="Time-step",ylab="Time (s)",col="grey10")
-			if (length(ith) > 1) {
-				points(ith-1,rt$dwall[ith],type="h",col="blue1")
-				#rug(ith-1,side=3,col="blue1")
-				mtext((ith-1)*tstep/3600,3,-.8,at=ith-1,cex=.8,col="blue1")
-			}
+			if (length(ith) > 1) mtext((ith-1)*tstep/3600,3,-.8,at=ith-1,cex=.8,col="blue1")
 
-			if (lmphys && length(itr) > 1) {
-				points(itr-1,rt$dwall[itr],type="h",col="red3")
-			}
+			if (length(itr) > 1) points(itr-1,rt$dwall[itr],type="h",col="red3")
 
-			plot(its-1,rt$cpu[its],type="h",main="CPU-time - zoom [0,12h]",xlab="Time-step",
+			plot(its-1,rt$cpu[its],type="h",main="CPU-time - zoom",xlab="Time-step",
 				ylab="Time (s)")
-		}
 
-		dev.off()
+			dev.off()
+		}
 	}
 }
