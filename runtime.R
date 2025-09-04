@@ -414,10 +414,11 @@ if (! "png" %in% names(cargs)) cargs$png = "."
 if (interactive()) browser()
 
 fnode = grep("=",args,invert=TRUE,value=TRUE)
-nd = readLines(fnode[1])
+leg = NULL
+nd = readLines(fnode[1],skipNul=TRUE)
 if (length(fnode) > 1) {
 	library(mfnode)
-	nds = lapply(fnode[-1],readLines)
+	nds = lapply(fnode[-1],readLines,skipNul=TRUE)
 	leg = gsub(".*node","",fnode,ignore.case=TRUE)
 }
 
@@ -767,27 +768,37 @@ if (! is.null(rt)) {
 		}
 
 		if (nts > 1) {
-			tsm = round(tint/(nts-1),3)
+			tsm = signif(tint/(nts-1),2)
 			cat("Mean time of forecast steps:",tsm,"(s)\n")
+			if (length(itr) > 2) {
+				tintr = sum(rt$dwall[itr[-1]])
+				trm = signif(tintr/(length(itr)-1),2)
+				tsm = signif((tint-tintr)/(nts-length(itr)),2)
+				cat("Mean time of non-radiation steps:",tsm,"(s)\n")
+				cat("Mean time of radiation steps:",trm,"(s)\n")
+			}
 		}
 
 		png(sprintf("%s/runtime.png",cargs$png))
 		par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 		plot(its-1,rt$dwall[its],type="h",main=c("Wall-time",tt),xlab="Time-step",
-			ylab="Time (s)",col="grey10")
+			ylab="Time (s)",col="grey10",xaxs="i",yaxs="i")
 		if (nth > 1) {
 			points(ith-1,rt$dwall[ith],type="h",col="blue1")
 			mtext((ith-1)*tstep/3600,3,-.8,at=ith-1,cex=.75,col="blue1")
 		}
 
-		if (length(itr) > 1) points(itr-1,rt$dwall[itr],type="h",col="red3")
+		if (length(itr) > 1) {
+			points(itr-1,rt$dwall[itr],type="h",col="red3")
+			mtext(c(tsm,trm),2,at=c(tsm,trm),cex=.75,col=c("black","red3"),las=1)
+		}
 
 		start = attr(rt,"start")
 		xlab = sprintf("Time since start (=%s) (s)",attr(rt,"start-time"))
 
 		y = seq(dim(rt)[1])-1
 		reg = line(rt$wall-start,y)
-		tt = sprintf("mean pace: %g steps/s (%d steps in %gs)",round(coef(reg)[2],1),
+		tt = sprintf("mean pace: %g steps/s (%d steps in %gs)",signif(coef(reg)[2],2),
 			nts,round(total))
 		plot(rt$wall-start,y,type="l",main=c("Forecast time",tt),xlab=xlab,
 			ylab="Time-step",xaxt="n",xaxs="i",yaxs="i")
@@ -812,7 +823,7 @@ if (! is.null(rt)) {
 			}
 		}
 
-		legend("topleft",leg,col=seq(along=leg),lty=1,inset=c(.05,.02))
+		if (! is.null(leg)) legend("topleft",leg,col=seq(along=leg),lty=1,inset=c(.05,.02))
 
 		dev.off()
 
@@ -838,8 +849,8 @@ if (! is.null(rt)) {
 
 			png(sprintf("%s/runtimez.png",cargs$png))
 			par(mfrow=c(2,1),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
-			tt0 = sprintf("Wall-time - zoom [0,%dh]",as.integer(h))
-			plot(its-1,rt$dwall[its],type="h",main=c(tt0,tt),
+			tt = sprintf("Wall-time - zoom [0,%dh]",as.integer(h))
+			plot(its-1,rt$dwall[its],type="h",main=tt,
 				xlab="Time-step",ylab="Time (s)",col="grey10")
 			if (length(ith) > 1) mtext((ith-1)*tstep/3600,3,-.8,at=ith-1,cex=.8,col="blue1")
 

@@ -150,7 +150,7 @@ vars:",head(fpnoms[-nv]),"...",fpnoms[nt],"\n")
 	if (! is.na(ind)) dimnames(sp1)[[3]][ind] = "HUMI.SPECIFI"
 
 	if (! is.null(sp1)) {
-		indt = match(times,dimnames(sp1)[[1]])
+		indt = match(step,dimnames(sp1)[[1]])
 		indv = match(fpnoms,dimnames(sp1)[[3]])
 		if (any(! is.na(indt)) && any(! is.na(indv))) {
 			leg = c(leg,"SP")
@@ -175,7 +175,7 @@ vars:",head(fpnoms[-nv]),"...",fpnoms[nt],"\n")
 	}
 
 	if (! is.null(gp1)) {
-		indt = match(times,dimnames(gp1)[[1]])
+		indt = match(step,dimnames(gp1)[[1]])
 		indv = match(fpnoms,dimnames(gp1)[[4]])
 		if (any(! is.na(indt)) && any(! is.na(indv))) {
 			leg = c(leg,"GFL")

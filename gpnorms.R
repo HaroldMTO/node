@@ -132,12 +132,15 @@ times:",head(times[-nt]),"...",times[nt],"
 vars:",head(gpnoms[-nv]),"...",gpnoms[nv],"\n")
 	sp1 = spnorm(nd,lev,abbrev=FALSE)
 	if (! is.null(sp1)) {
-		indt = match(times,dimnames(sp1)[[1]])
+		indt = match(step,dimnames(sp1)[[1]])
 		indv = match(gpnoms,dimnames(sp1)[[3]])
 		if (any(! is.na(indt)) && any(! is.na(indv))) {
 			leg = c(leg,"SP")
 			sp1 = sp1[indt,,indv,drop=FALSE]
-			gpl = c(gpl,list(sp1))
+			sp2 = array(NA_real_,dim=c(dim(sp1)[1:2],3,dim(sp1)[3]),
+				dimnames=c(dimnames(sp1)[1:2],list(c("avg","min","max")),dimnames(sp1)[3]))
+			for (i in seq(dim(sp1)[3])) sp2[,,,i] = sp1[,,i]
+			gpl = c(gpl,list(sp2))
 		} else {
 			cat("--> SP times:",dimnames(sp1)[[1]],"\n")
 			cat("--> SP vars:",dimnames(sp1)[[3]],"\n")
