@@ -44,12 +44,12 @@ wavend = function(nd,ndglg)
 	if (length(ij) == 0) {
 		ij = grep("\\( *JGL,NLOENG,NMENG *\\)",nd)
 		is = is[is > ij]
-		ind = seq(ij+1,is-1)
+		ind = seq(ij+1,is[1]-1)
 		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
 		nmeng = as.integer(gsub("\\( *-?\\d+ +\\d+ +(\\d+)\\)","\\1",s))
 	} else {
 		is = is[is > ij]
-		ind = seq(ij+1,is-1)
+		ind = seq(ij+1,is[1]-1)
 		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
 		nmeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
 	}
@@ -62,8 +62,9 @@ specnb = function(nd)
 {
 	ij = grep("\\( *JM,(G\\w*%)?NDGLU *\\)",nd)
 	is = grep("Set up distributed|S%ITHRESHOLD",nd)
+	if (length(ij) > 1) ij = max(ij)
 	is = is[is > ij]
-	ind = seq(ij+1,is-1)
+	ind = seq(ij+1,is[1]-1)
 	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+,? +\\d+\\)",nd[ind])))
 	ndglu = as.integer(gsub("\\( *-?\\d+,? +(\\d+)\\)","\\1",s))
 
@@ -590,10 +591,29 @@ if (length(nfplev) == 1) {
 	pngoff(op)
 }
 
+if (nfplev < nflevg) {
+	vp00 = getvar("VP00",nd)
+	etafp = abfp$Ah/vp00+abfp$Bh
+	etafpf = (etafp[-1]+etafp[-nfplev])/2
+	etaf = (eta[-1]+eta[-nflevg])/2
+	pngalt(sprintf("%s/fpeta.png",cargs$png))
+	op = par(mfrow=c(1,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	tt = "FP levels"
+	ifp = (nfplev+1)%/%2
+	n1 = match(TRUE,etaf > etafpf[ifp])
+	plot(etaf[1:n1],1:n1,type="o",lty=1,pch="-",main=c(tt,"Highest levels"),
+		xlab=expression(eta),ylab="Level",ylim=c(n1,1),cex=2)
+	points(etafpf[1:ifp],1:ifp,pch=20,col=2,cex=.7)
+	plot(etaf[n1:nflevg],n1:nflevg,type="o",lty=1,pch="-",main=c(tt,"Lowest levels"),
+		xlab=expression(eta),ylab="Level",ylim=c(nflevg,n1),cex=2)
+	points(etafpf[(ifp+1):nfplev],(ifp+1):nfplev,pch=20,col=2,cex=.7)
+	pngoff(op)
+}
+
 cat("Vertical scheme\n")
 rinte = vfe(nd,nflevg,"RINTE")
-pngalt(sprintf("%s/vfeint.png",cargs$png))
 if (! is.null(rinte)) {
+	pngalt(sprintf("%s/vfeint.png",cargs$png))
 	ilev = c(1,nflevg%/%2,nflevg,nflevg+1)
 	op = par(mfrow=c(1,4),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0),pch="-")
 	for (i in c(1,nflevg%/%2,nflevg)) {
@@ -609,12 +629,12 @@ if (! is.null(rinte)) {
 	plot(rinte[,nflevg+1],seq(nflevg),type="o",xlab="Rinte_l",ylab="Level",
 		main=c("Integral",sprintf("sum(Rinte*1): %.3g",s)),ylim=c(nflevg,1))
 	abline(v=0,col="grey")
+	pngoff(op)
 }
-pngoff(op)
 
 rderi = vfe(nd,nflevg,"RDERI")
-pngalt(sprintf("%s/vfeder.png",cargs$png))
 if (! is.null(rderi)) {
+	pngalt(sprintf("%s/vfeder.png",cargs$png))
 	ilev = c(1,nflevg%/%2,nflevg,nflevg+1)
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0),pch="-")
 	for (i in c(1,nflevg%/%2,nflevg)) {
@@ -624,13 +644,14 @@ if (! is.null(rderi)) {
 			ylim=c(nflevg,1))
 		abline(v=0,col="grey")
 	}
+
+	pngoff(op)
 }
-pngoff(op)
 
 cat("Vertical SI system\n")
 si = silev(nd,nflevg)
-pngalt(sprintf("%s/sipre.png",cargs$png))
 if (! is.null(si)) {
+	pngalt(sprintf("%s/sipre.png",cargs$png))
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	ylim = c(nflevg,1)
 	plot(si$sivp,1:nflevg,type="o",lty=1,pch="-",main="SIVP: vert. modes (= freq.)",
@@ -645,8 +666,8 @@ if (! is.null(si)) {
 
 cat("Spectral horizontal diffusion\n")
 hd = sihd(nd,nflevg,nsmax)
-pngalt(sprintf("%s/sihd.png",cargs$png))
 if (! is.null(hd)) {
+	pngalt(sprintf("%s/sihd.png",cargs$png))
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	plot(hd$pdi/100,1:nflevg,type="l",lty=1,main="PDILEV: 1+7.5*(3-log10(P))",
 		xlab="PDILEV (hPa)",ylab="Level",ylim=ylim,cex=1.5)
@@ -661,8 +682,8 @@ if (! is.null(hd)) {
 
 cat("Spectral SI correction\n")
 cor = sicor(nd,nflevg)
-pngalt(sprintf("%s/sicor.png",cargs$png))
 if (! is.null(cor)) {
+	pngalt(sprintf("%s/sicor.png",cargs$png))
 	op = par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	plot(cor$rcordit,1:nflevg,type="l",lty=1,main="RCORDIT (tropo)",xlab="RCORDIT",
 		ylab="Level",ylim=ylim,cex=1.5)
