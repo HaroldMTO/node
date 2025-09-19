@@ -205,6 +205,12 @@ then
 	echo $norms | grep -q gpt1 && gpre="$gt1 sl:$gt1 slmf:$gt1 cpglag"
 	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev type=gpgmv$suf \
 		gpref="gpnorm gmvt0" gpre="$gpre" png=$png $ropt
+
+	if [ -z "$fin2" ]
+	then
+		echo "GP norms for GMV+SPEC"
+		R --slave -f $node/gpnorms.R --args $fin lev=$lev type=gmvspec$suf png=$png $ropt
+	fi
 fi
 
 if grep -iqE "gpnorm adiab call_sl" $fin && echo $norms | grep -q adiab

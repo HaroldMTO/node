@@ -40,7 +40,7 @@ ptype = cargs$type
 detail = regexpr("gp.+detail",ptype) > 0
 hmin = as.numeric(cargs$hmin)
 hmax = as.numeric(cargs$hmax)
-gpre = cargs$gpre
+gpre = getarg("gpre",args)
 gpref = cargs$gpref
 leg = cargs$leg
 
@@ -77,7 +77,7 @@ if (is.null(gpref)) {
 	cat("--> reference RE null, set it to standard print (ie 'NORMS AT...')\n")
 	gpref = "NORMS AT (START|NSTEP|END) CNT4"
 	ind = grep(gpref,nd)
-	if (length(ind) < 3) {
+	if (length(ind) == 0) {
 		cat("--> too few norms, set reference RE to empty string\n")
 		gpref = ""
 	}
