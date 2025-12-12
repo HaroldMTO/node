@@ -85,8 +85,6 @@ then
 		echo "Error: $fin is not a text file" >&2
 		exit 1
 	fi
-
-	fin=$ftmp
 fi
 
 if ! grep -qiE '\-* Set up ' $fin
@@ -111,11 +109,13 @@ fi
 
 loc=$(dirname $fout)
 
-if echo $fin | grep -qEi '(.+/)?\<node\.?\w+'
+png=$(basename $fout .html)
+[ "$png" = "$fout" ] && png=$(basename $fin | sed -re 's:^node\.?(\w+.*):\1:i')
+if [ "$png" = $(basename $fin) ]
 then
-	png=$loc/$(echo $fin | sed -re 's:(.+/)?\<node\.?(\w+):\2:i')
+	png=$(mktemp -p $loc -d setupXXX)
 else
-	png=$(mktemp -t $loc -d setupXXX)
+	png=$loc/$png
 fi
 
 png=$(echo $png | sed -re 's:^\./::')
@@ -138,5 +138,6 @@ fi > $png/map.txt
 date=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
 res=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
 base=$(printf "%s %dh" $date $((res/3600)))
+png=$(basename $png)
 sed -re "s:TAG NODE:$fin:" -e "s:TAG BASE:$base:" -e "s:TAG DIR:$png:g" \
 	-e "/TAG MAP/r $png/map.txt" -e "/TAG JO/r $png/jo.txt" $node/setup.html > $fout

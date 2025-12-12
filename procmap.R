@@ -41,20 +41,32 @@ longend = function(nd,ndglg)
 wavend = function(nd,ndglg)
 {
 	ij = grep("\\( *JGL,NMENG *\\)",nd)
-	is = grep("\\( *JM,(G\\w*%)?NDGLU *\\)|JGL/NLOEN/NMEN",nd)
-	if (length(ij) == 0) {
-		ij = grep("\\( *JGL,NLOENG,NMENG *\\)",nd)
-		if (length(ij) > 1) ij = max(ij[ij < max(is)])
-		is = is[is > ij]
-		ind = seq(ij+1,is[1]-1)
-		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
-		nmeng = as.integer(gsub("\\( *-?\\d+ +\\d+ +(\\d+)\\)","\\1",s))
-	} else {
+	if (length(ij) > 0) {
+		is = grep("\\( *JM,(G\\w*%)?NDGLU *\\)|JGL/NLOEN/NMEN",nd)
 		if (length(ij) > 1) ij = max(ij[ij < max(is)])
 		is = is[is > ij]
 		ind = seq(ij+1,is[1]-1)
 		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
 		nmeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
+	}
+
+	ij = grep("\\( *JGL,NLOENG,NMENG *\\)",nd)
+	if (length(ij) > 0) {
+		is = grep("\\( *JM,(G\\w*%)?NDGLU *\\)|JGL/NLOEN/NMEN",nd)
+		if (length(ij) > 1) ij = max(ij[ij < max(is)])
+		is = is[is > ij]
+		ind = seq(ij+1,is[1]-1)
+		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
+		nmeng = as.integer(gsub("\\( *-?\\d+ +\\d+ +(\\d+)\\)","\\1",s))
+	}
+
+	ij = grep("^ *(G\\w*%NMEN|NMENG\\>)",nd)
+	if (length(ij) > 0) {
+		is = grep("G%NDGLU|NMEN:",nd,ignore.case=TRUE)
+		if (length(ij) > 1) ij = max(ij[ij < max(is)])
+		is = is[is > ij]
+		ind = seq(ij+1,is[1]-1)
+		nmeng = intlines(nd[ind])
 	}
 
 	off = (length(nmeng)-ndglg)/2
@@ -64,12 +76,23 @@ wavend = function(nd,ndglg)
 specnb = function(nd)
 {
 	ij = grep("\\( *JM,(G\\w*%)?NDGLU *\\)",nd)
-	is = grep("Set up distributed|S%ITHRESHOLD",nd)
-	if (length(ij) > 1) ij = max(ij[ij < max(is)])
-	is = is[is > ij]
-	ind = seq(ij+1,is[1]-1)
-	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+,? +\\d+\\)",nd[ind])))
-	ndglu = as.integer(gsub("\\( *-?\\d+,? +(\\d+)\\)","\\1",s))
+	if (length(ij) > 0) {
+		is = grep("Set up distributed|S%ITHRESHOLD",nd)
+		if (length(ij) > 1) ij = max(ij[ij < max(is)])
+		is = is[is > ij]
+		ind = seq(ij+1,is[1]-1)
+		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+,? +\\d+\\)",nd[ind])))
+		ndglu = as.integer(gsub("\\( *-?\\d+,? +(\\d+)\\)","\\1",s))
+	}
+
+	ij = grep("^ *(G\\w*%)?NDGLU",nd)
+	if (length(ij) > 0) {
+		is = grep("Set up distributed|S%ITHRESHOLD",nd)
+		if (length(ij) > 1) ij = max(ij[ij < max(is)])
+		is = is[is > ij]
+		ind = seq(ij+1,is[1]-1)
+		ndglu = intlines(nd[ind])
+	}
 
 	ndglu
 }
@@ -77,10 +100,19 @@ specnb = function(nd)
 wavenb = function(nd)
 {
 	i1 = grep("^ *\\(JGL,NLOEN,NMEN\\)",nd)
-	i2 = grep("^ *ARRAY +NSTAGP +ALLOCATED",nd)
-	ind = seq(i1+1,i2-1)
-	s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
-	nmen = as.integer(gsub("\\( *\\d+ +\\d+ +(\\d+)\\)","\\1",s))
+	if (length(i1) > 1) {
+		i2 = grep("^ *ARRAY +NSTAGP +ALLOCATED",nd)
+		ind = seq(i1+1,i2-1)
+		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
+		nmen = as.integer(gsub("\\( *\\d+ +\\d+ +(\\d+)\\)","\\1",s))
+	}
+
+	i1 = grep("^ *NMEN\\>",nd)
+	if (length(i1) > 1) {
+		i2 = grep("Set up Legendre CSGLEG",nd)
+		ind = seq(i1+1,i2-1)
+		nmen = intlines(nd[ind])
+	}
 
 	nmen
 }
@@ -237,12 +269,33 @@ sihd = function(nd,nflevg,nsmax)
 	data.frame(pdi=pdi,pdis=pdis,knshd=knshd)
 }
 
+rfric = function(nd)
+{
+	i1 = grep("SURAYFRIC",nd)
+	if (length(i1) == 0) return(NULL)
+
+	i2 = grep("RRFTAU",nd)
+	il = seq(i1+1,i2-1)
+	numlines(nd[il])
+}
+
+sponge = function(nd,nflevg)
+{
+	i1 = grep("ABSORBANT COEFFICIENT",nd)
+	if (length(i1) == 0) return(NULL)
+
+	ind = i1+2+1:nflevg
+	spn = numlines(nd[ind])
+	spn = matrix(spn,nc=nflevg)
+	spn[3,]
+}
+
 sicor = function(nd,nflevg)
 {
 	i1 = grep("SURCORDI",nd)
 	if (length(i1) == 0) return(NULL)
 
-	i2 = grep("Set up vertical interpolator",nd,ignore.case=TRUE)
+	i2 = grep("Set up vertical interpolator|SURAYFRIC",nd,ignore.case=TRUE)
 	i2 = i2[i2 > i1]
 	if (length(i2) == 0) i2 = grep("Set up relaxation",nd,ignore.case=TRUE)
 	if (length(i2) == 0) i2 = grep("NSLDIMK *=",nd,ignore.case=TRUE)
@@ -486,10 +539,10 @@ nprgpns = getvar(".*\\<NPRGPNS",nd)
 ndglg = getvar("NDGLG",nd)
 ndgnh = ndglg%/%2
 ndlon = getvar("NDLON",nd)
-ig = grep("NGPTOTG",nd)
+ig = grep("NGPTOT_CAP",nd)
 ngptot = as.integer(strsplit(gsub("^ *","",nd[ig+1])," +")[[1]])
 
-cat("Grid type and truncature\n")
+cat("Grid type and truncation\n")
 gem = getgem(nd)
 nsmax = getvar("NSMAX",nd)
 nmsmax = getvar("NSMAX.+NMSMAX",nd)
@@ -532,8 +585,9 @@ if (dim(std)[2] == 1) {
 
 dev.off()
 
-ab = abh(nd,nflevg)
-eta = ab$alpha+ab$Bh
+vp00 = getvar("VP00",nd)
+ab = abh(nd,nflevg,vp00)
+eta = ab$etah
 
 cat("Vertical coordinate (1)\n")
 png(sprintf("%s/levels.png",cargs$png))
@@ -591,8 +645,7 @@ if (length(nfplev) == 1) {
 	dev.off()
 }
 
-if (nfplev < nflevg) {
-	vp00 = getvar("VP00",nd)
+if (! is.null(nfplev) && nfplev < nflevg) {
 	etafp = abfp$Ah/vp00+abfp$Bh
 	nl = length(which(etafp < max(eta)))
 	il0 = which(etafp == max(eta))
@@ -821,8 +874,8 @@ if (getvar("NPRINTLEV",nd) > 0) {
 cat("Vertical cubic weights (SL)\n")
 vintw = cuico(nd,nflevg)
 
-png(sprintf("%s/vintw.png",cargs$png))
 if (! is.null(vintw)) {
+	png(sprintf("%s/vintw.png",cargs$png))
 	par(mfrow=c(2,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	nl3 = nflevg-3
 	ntop = min(nl3,5)
@@ -842,8 +895,8 @@ if (! is.null(vintw)) {
 
 cat("Vertical WENO coefficients\n")
 gamma = weno(nd,nflevg)
-png(sprintf("%s/weno.png",cargs$png))
 if (! is.null(gamma)) {
+	png(sprintf("%s/weno.png",cargs$png))
 	par(mfrow=c(1,3),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 
 	for (i in 1:3) {
@@ -874,17 +927,17 @@ ndim = c(nproc,nprgpns,ndglg,ndlon,min(ngptot),max(ngptot))
 cat("Values from log file (nproc/nprgpns/ndglg/ndlon/ngptot/ngptotg):\n",ndim,"\n")
 
 s = grep("SETA=.+ LAT=.+ NSTA=",nd,value=TRUE)
-png(sprintf("%s/procmap.png",cargs$png))
 if (length(s) > 0) {
 	sta = procmap(s)
 	s = grep("SETA=.+ LAT=.+ (D%)?NONL=",nd,value=TRUE)
 	onl = procmap(s)
 
+	png(sprintf("%s/procmap.png",cargs$png))
 	ncomp = plotmap(sta,onl)
+	dev.off()
 
 	if (any(ncomp != ndim)) cat("--> computed values differ from log file:\n",ncomp,"\n")
 }
-dev.off()
 
 cat("SL scheme information\n")
 if (any(regexpr("LSLAG *= *T(RUE)?",nd) > 0)) {
@@ -906,8 +959,8 @@ SL comms for MPI task",sub(" *MYPROC += +(\\d+).*","\\1",nd[ip[1]]),":",icomm,"\
 
 cat("Vertical mesoscale drag\n")
 gwd = mesodrag(nd,nflevg)
-png(sprintf("%s/mesodrag.png",cargs$png))
 if (! is.null(gwd)) {
+	png(sprintf("%s/mesodrag.png",cargs$png))
 	par(mfrow=c(1,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	ylim = c(nflevg,1)
 	plot(gwd$u,1:nflevg,type="o",lty=1,pch="-",main="Mesoscale drag",
@@ -916,8 +969,28 @@ if (! is.null(gwd)) {
 	plot(gwd$t,1:nflevg,type="o",lty=1,pch="-",main="Mesoscale drag",
 		xlab="Temperature",ylab="Level",ylim=ylim,cex=1.5)
 	abline(v=0,col="grey")
+	dev.off()
 }
-dev.off()
+
+cat("Vertical Rayleigh friction and spectral sponge\n")
+rf = rfric(nd)
+rsponge = sponge(nd,nflevg)
+if (! is.null(rf) || ! is.null(rsponge)) {
+	png(sprintf("%s/rfric.png",cargs$png))
+	nc = length(is.null(rf))+length(is.null(rsponge))
+	par(mfrow=c(1,nc),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
+	if (! is.null(rf)) {
+		plot(rf,1:nflevg,type="o",lty=1,pch="-",main="Rayleigh friction",xlab="Weight",
+			ylab="Level",ylim=c(nflevg,1),cex=1.5)
+		abline(v=0,col="grey")
+	}
+	if (! is.null(rsponge)) {
+		plot(rsponge,1:nflevg,type="o",lty=1,pch="-",main="Spectral sponge",
+			xlab="Absorbant coef.",ylab="Level",ylim=c(nflevg,1),cex=1.5)
+		abline(v=0,col="grey")
+	}
+	dev.off()
+}
 
 if (nsttyp == 2) {
 	cat("--> tilted grid\n")
