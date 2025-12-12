@@ -76,16 +76,6 @@ do
 	ls -L $f > /dev/null
 done
 
-loc=$(dirname $fout)
-
-# set png before changing fin (potentialy)
-if basename $fin | grep -qEi '^node\.?\w+.*'
-then
-	png=$loc/$(basename $fin | sed -re 's:^node\.?(\w+.*):\1:i')
-else
-	png=$(mktemp -p $loc -d runtimeXXX)
-fi
-
 if ! file -L $fin | grep -q text
 then
 	ftmp=$(mktemp --tmpdir)
@@ -96,8 +86,17 @@ then
 		echo "Error: $fin is not a text file" >&2
 		exit 1
 	fi
+fi
 
-	fin=$ftmp
+loc=$(dirname $fout)
+
+png=$(basename $fout .html)
+[ "$png" = "$fout" ] && png=$(basename $fin | sed -re 's:^node\.?(\w+.*):\1:i')
+if [ "$png" = $(basename $fin) ]
+then
+	png=$(mktemp -p $loc -d runtimeXXX)
+else
+	png=$loc/$png
 fi
 
 png=$(echo $png | sed -re 's:^\./::')
@@ -139,6 +138,7 @@ fi >> $png/anaguess.html
 date=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUDATE *= *([0-9]+) .+:\1:')
 res=$(grep -E 'NUDATE *=' $fin | sed -re 's:.*\<NUSSSS *= *([0-9]+).*:\1:')
 base=$(printf "%s %dh" $date $((res/3600)))
+png=$(basename $png)
 sed -re "s:TAG NODE:$fin:" -e "s:TAG BASE:$base:" -e "s:TAG DIR:$png:g" \
 	-e "/TAG ANA/r $png/anaguess.html"  -e "/TAG JO/r $png/jo.txt" $node/runtime.html > \
 	$fout

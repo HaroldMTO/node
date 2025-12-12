@@ -41,8 +41,7 @@ fi
 
 path=""
 patt=""
-png=""
-fout=""
+fout="runtimes.html"
 start=""
 end=""
 res=""
@@ -52,7 +51,7 @@ while [ $# -ne 0 ]
 do
 	case $1 in
 	-o)
-		png=$2
+		fout=$2
 		shift
 		;;
 	-start)
@@ -82,11 +81,8 @@ do
 		elif [ -z "$patt" ]
 		then
 			patt=$1
-		elif [ -z "$fout" ]
-		then
-			fout=$1
 		else
-			echo "Error: output file already set as '$fout', unknown option '$1'" >&2
+			echo "Error: path/patt already set as '$path'/'$patt', unknown option '$1'" >&2
 			exit 1
 		fi
 		;;
@@ -95,19 +91,26 @@ do
 	shift
 done
 
-[ -n "$fout" ] || fout=runtimes.html
-
-if [ -z "$path" -o -z "$patt" -o -z "$png" -o -z "$fout" ]
+if [ -z "$path" -o -z "$patt" -o -z "$fout" ]
 then
 	echo "Error: mandatory arguments missing
 path: '$path'
 patt: '$patt'
-png: '$png'
 fout: '$fout'" >&2
 	exit 1
 fi
 
 set -e
+
+loc=$(dirname $fout)
+
+png=$(basename $fout .html)
+if [ "$png" = "$fout" ]
+then
+	png=$(mktemp -p $loc -d runtimesXXX)
+else
+	png=$loc/$png
+fi
 
 png=$(echo $png | sed -re 's:^\./::')
 mkdir -p $png
@@ -144,5 +147,6 @@ do
 done > $png/img.html
 
 path_=$(echo $path | sed -e 's/:/_/g')
+png=$(basename $png)
 sed -re "s:TAG PATH:$path_:" -e "s:TAG PATT:$patt:" -e "s:TAG DIR:$png:g" \
 	-e "/TAG IMG/r $png/img.html" $node/runtimes.html > $fout
