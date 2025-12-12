@@ -1,6 +1,19 @@
 library(mfnode)
 
-gpfre = sprintf("%s|DIV|ETADOT",gpfre)
+gpfre = sprintf("%s|DIV|E(TA)?DOT",gpfre)
+
+pc2num = function(step,nsiter)
+{
+	# C[jstep] or C[jiter]: better look for predictor
+	indp = which(regexpr("^C|_C\\d",step) < 0)
+	# no corrector at last step
+	indp = indp[indp < length(step)]
+	for (i in seq(nsiter)) {
+		step[indp+i] = as.numeric(step[indp])+round(i/(nsiter+1),3)
+	}
+
+	step
+}
 
 getarg = function(x,args)
 {
@@ -94,12 +107,6 @@ if (is.null(gp1)) {
 	quit("no")
 }
 
-i0 = apply(gp1,1,function(x) all(x==0))
-if (any(i0) && ! all(i0)) {
-	cat("--> GP norms all 0 for some steps, removed\n")
-	gp1 = gp1[-which(i0),,,,drop=FALSE]
-}
-
 step = dimnames(gp1)[[1]]
 cat(". steps:",head(step[-length(step)]),"...",step[length(step)],"\n")
 if (nstop == 0 && dim(gp1)[1] > 1) cat("--> steps are events of the job\n")
@@ -114,7 +121,16 @@ if (length(ix) == length(step)) {
 	step = dimnames(gp1)[[1]]
 }
 
-istep = as.numeric(gsub("C(\\d+)","\\1.5",step))
+nsiter = getvar("NSITER",nd)
+if (nsiter > 0) step = pc2num(step,nsiter)
+
+i0 = apply(gp1,1,function(x) all(x==0))
+if (any(i0) && ! all(i0)) {
+	cat("--> GP norms all 0 for some steps, removed\n")
+	gp1 = gp1[-which(i0),,,,drop=FALSE]
+	step = step[-which(i0)]
+}
+istep = as.numeric(step)
 times = tstep*istep
 
 gpl = list(gp1)
@@ -177,6 +193,10 @@ vars:",head(gpnoms[-nv]),"...",gpnoms[nv],"\n")
 			next
 		}
 
+		stepi = dimnames(gpi)[[1]]
+		nsiter = getvar("NSITER",nd)
+		if (nsiter > 0) stepi = pc2num(stepi,nsiter)
+
 		i0 = apply(gpi,1,function(x) all(x==0))
 		if (all(i0)) {
 			cat("--> GFL all 0 for all steps, continue\n")
@@ -184,20 +204,20 @@ vars:",head(gpnoms[-nv]),"...",gpnoms[nv],"\n")
 		} else if (any(i0)) {
 			cat("--> GFL all 0 for some steps, removed\n")
 			gpi = gpi[-which(i0),,,,drop=FALSE]
+			stepi = stepi[-which(i0)]
 		}
 
 		indv = match(gpnoms,dimnames(gpi)[[4]])
 		stopifnot(any(! is.na(indv)))
 
-		stepi = dimnames(gpi)[[1]]
 		ix = grep("^X",stepi)
 		if (length(ix) > 0) {
 			gpi = gpi[-ix,,,,drop=FALSE]
-			stepi = dimnames(gpi)[[1]]
+			stepi = stepi[-ix]
 		}
 
 		tstepi = getvar("TSTEP",nd)
-		istepi = as.numeric(gsub("C(\\d+)","\\1.5",stepi))
+		istepi = as.numeric(stepi)
 		timesi = tstepi*istepi
 
 		inds = match(times,timesi)

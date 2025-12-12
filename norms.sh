@@ -135,12 +135,6 @@ temp=$(mktemp -d -t normsXXX)
 
 trap 'rm -r $temp' 0
 
-# set png before changing fin (potentialy)
-loc=$(dirname $fout)
-png=$loc/$(basename $fin | sed -re 's:^node\.?(\w+.*):\1:i')
-echo $png | grep -qE '(.+/)?001_01$' && png=$loc/$(basename $fout .html)
-png=$(echo $png | sed -re 's:^\./::')
-
 if ! file -L $fin | grep -qE "(ASCII|UTF-8 Unicode) text"
 then
 	ftmp=$(mktemp --tmpdir)
@@ -152,7 +146,7 @@ then
 		exit 1
 	fi
 
-	fin=$ftmp
+	#fin=$ftmp
 elif ! grep -qEi '^ \w+:\w+:\w+ +STEP +[0-9]+' $fin
 then
 	echo "Warning: no 'STEP...' in $fin" >&2
@@ -168,6 +162,18 @@ else
 	R_LIBS=$R_LIBS:~petithommeh/lib
 fi
 
+loc=$(dirname $fout)
+
+png=$(basename $fout .html)
+[ "$png" = "$fout" ] && png=$(basename $fin | sed -re 's:^node\.?(\w+.*):\1:i')
+if [ "$png" = $(basename $fin) ]
+then
+	png=$(mktemp -p $loc -d normsXXX)
+else
+	png=$loc/$png
+fi
+
+png=$(echo $png | sed -re 's:^\./::')
 mkdir -p $png
 echo "--> output sent to $png"
 
@@ -202,7 +208,7 @@ then
 	echo "GP norms for GMV"
 	gpre=""
 	gt1="gpnorm gmvt1"
-	echo $norms | grep -q gpt1 && gpre="$gt1 sl:$gt1 slmf:$gt1 cpglag"
+	echo $norms | grep -q gpt1 && gpre="$gt1 sl$:$gt1 slmf:$gt1 cpglag"
 	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev type=gpgmv$suf \
 		gpref="gpnorm gmvt0" gpre="$gpre" png=$png $ropt
 
@@ -275,7 +281,7 @@ do
 			$(ls -1 $png | grep -E "^${pre}norm$s[[:digit:]]{2,}\.png")
 		do
 			[ $nc -gt 0 -a $((nc%2)) -eq 0 ] && echo -e "</tr>\n<tr>"
-			echo -e "\t<td><img src=\"$png/$ficp\"/></td>"
+			echo -e "\t<td><img src=\"$(basename $png)/$ficp\"/></td>"
 			nc=$((nc+1))
 		done
 

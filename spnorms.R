@@ -1,5 +1,18 @@
 library(mfnode)
 
+pc2num = function(step,nsiter)
+{
+	# C[jstep] or C[jiter]: better look for predictor
+	indp = which(regexpr("^C|_C\\d",step) < 0)
+	# no corrector at last step
+	indp = indp[indp < length(step)]
+	for (i in seq(nsiter)) {
+		step[indp+i] = as.numeric(step[indp])+round(i/(nsiter+1),3)
+	}
+
+	step
+}
+
 args = commandArgs(trailingOnly=TRUE)
 largs = strsplit(args,split="=")
 cargs = lapply(largs,function(x) unlist(strsplit(x[-1],split=":")))
@@ -81,7 +94,10 @@ if (length(ix) == length(step)) {
 	step = dimnames(gp1)[[1]]
 }
 
-istep = as.numeric(gsub("C(\\d+)","\\1.5",step))
+nsiter = getvar("NSITER",nd)
+if (nsiter > 0) step = pc2num(step,nsiter)
+istep = as.numeric(step)
+
 cat(". steps:",head(step[-length(step)]),"...",step[length(step)],"\n")
 if (nstop == 0 && dim(sp1)[1] > 1) cat("--> steps are events of the job\n")
 
@@ -113,7 +129,8 @@ for (i in seq(along=spre)) {
 	stopifnot(any(! is.na(indv)))
 
 	stepi = dimnames(spi)[[1]]
-	istepi = as.numeric(gsub("C(\\d+)","\\1.5",stepi))
+	if (nsiter > 0) stepi = pc2num(stepi,nsiter)
+	istepi = as.numeric(stepi)
 	tstepi = getvar("TSTEP",nd)
 	timesi = tstepi*istepi
 	inds = match(times,timesi)
@@ -124,17 +141,25 @@ for (i in seq(along=spre)) {
 leg = leg[which(! sapply(spl,is.null))]
 spl = spl[! sapply(spl,is.null)]
 
-stepc = step[regexpr("C\\d+",step) > 0]
-if (length(stepc) > 0) {
+if (FALSE && nsiter > 0) {
 	cat("--> PC scheme, split P/C steps\n")
-	indc = match(stepc,step)
-	ip = which(step %in% step[-indc])
-	indc = match(paste("C",step[ip],sep=""),step)
-	splc = lapply(spl,function(spi) spi[indc,,,drop=FALSE])
-	splp = lapply(spl,function(spi) spi[ip,,,drop=FALSE])
-	spl = c(splp,splc)
-	leg = c(leg,paste(leg,"Cor"))
+	# C[jstep] or C[jiter]: better look for predictor
+	ip = which(regexpr("^C",step) < 0)
+	stepc = step[-ip]
+	spl = lapply(spl,function(spi) spi[ip,,,drop=FALSE])
+	# problem of last step which doesn't have Corr...
+	if (FALSE) {
+	for (i in seq(nsiter)) {
+		indc = match(paste("C",step[ip],sep=""),step)
+		splc = lapply(spl,function(spi) spi[indc,,,drop=FALSE])
+		splpc = c(splpc,splc)
+	}
+
+	leg = c(leg,paste(leg,corr))
+	}
+
 	istep = istep[ip]
+	times = tstep*istep
 	sp1 = spl[[1]]
 }
 
