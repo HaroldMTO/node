@@ -12,7 +12,7 @@ Description:
 
 Usage:
 	norms.sh NODE1 NODE2... -o HTML [-lev (LEV|I1:I2:...)] [-detail] [-nogfl] [-nogmv] \
-[-noadiab] [-noslb2] [-nospt1] [-nogpt1] [-not1] [-ref FILE] [-opt OPTIONS] [-h]
+[-noadiab] [-noslb1] [-noslb2] [-nospt1] [-nogpt1] [-not1] [-ref FILE] [-opt OPTIONS] [-h]
 
 Options:
 	NODE1, NODE2,...: NODE files containing SP and/or GP norms to plot (see Details)
@@ -61,7 +61,7 @@ then
 	exit
 fi
 
-norms="spt1gpt1gmvgfladiabslb2fp"
+norms="spt1gpt1gmvgfladiabslb1slb2fp"
 fin=""
 fin2=""
 fout=""
@@ -95,6 +95,7 @@ do
 	-nogfl) norms=$(echo $norms | sed -re 's:gfl::');;
 	-nogmv) norms=$(echo $norms | sed -re 's:gmv::');;
 	-noadiab) norms=$(echo $norms | sed -re 's:adiab::');;
+	-noslb1) norms=$(echo $norms | sed -re 's:slb1::');;
 	-noslb2) norms=$(echo $norms | sed -re 's:slb2::');;
 	-nofp) norms=$(echo $norms | sed -re 's:fp::');;
 	-nospt1) norms=$(echo $norms | sed -re 's:spt1::');;
@@ -234,6 +235,13 @@ then
 		$ropt
 fi
 
+if grep -iqE "gpnorm slb1 cpg$" $fin && echo $norms | grep -q slb1
+then
+	echo "GP norms for ZB1"
+	R --slave -f $node/gpnorms.R --args $fin $fin2 lev=$lev type=gpb1$suf \
+		gpref="gpnorm slb1 cpg$" gpre= png=$png $ropt
+fi
+
 if grep -iqE "FULL-POS GPNORMS" $fin && echo $norms | grep -q fp
 then
 	if grep -iqE "gpnorm dynfpos z" $fin
@@ -265,7 +273,7 @@ then
 	fi
 fi
 
-for pre in sp gpgmv$suf gpgfl$suf gpadiab$suf gpsi$suf fp$suf fpsp \
+for pre in sp gpgmv$suf gpgfl$suf gpadiab$suf gpsi$suf gpb1$suf fp$suf fpsp \
 	gflspec$suf fpgp$suf fpspec
 do
 	echo "HTML files for $pre"
@@ -307,7 +315,7 @@ base=$(printf "%s %dh" $date $((res/3600)))
 sed -re "s:TAG NODE:$fin:" -e "s:TAG BASE:$base:" \
 	-e "/TAG SP\>/r $temp/sp.html" -e "/TAG GPGMV/r $temp/gpgmv$suf.html" \
 	-e "/TAG GPGFL/r $temp/gpgfl$suf.html" -e "/TAG GPADIAB/r $temp/gpadiab$suf.html" \
-	-e "/TAG GPSI/r $temp/gpsi$suf.html" -e "/TAG SPFPOS/r $temp/fpsp.html" \
-	-e "/TAG FPOS/r $temp/fp$suf.html" -e "/TAG GFLSPEC/r $temp/gflspec$suf.html" \
-	-e "/TAG SPECFPOS/r $temp/fpspec.html" -e "/TAG GPFPOS/r $temp/fpgp$suf.html" \
-	$node/norms.html > $fout
+	-e "/TAG GPSI/r $temp/gpsi$suf.html" -e "/TAG GPB1/r $temp/gpb1.html" \
+	-e "/TAG GFLSPEC/r $temp/gflspec$suf.html" -e "/TAG FPOS/r $temp/fp$suf.html" \
+	-e "/TAG SPFPOS/r $temp/fpsp.html" -e "/TAG SPECFPOS/r $temp/fpspec.html" \
+	-e "/TAG GPFPOS/r $temp/fpgp$suf.html" $node/norms.html > $fout
