@@ -13,6 +13,7 @@ install:
 	! git status --porcelain 2>/dev/null | grep -qvE "^\?\? "
 	make node
 	make $B/norms.sh
+	make $B/normdiff.sh
 	make $B/setup.sh
 	make $B/runtime.sh
 	make $B/runtimes.sh
@@ -24,11 +25,16 @@ install:
 node:
 	mkdir -p $P
 	cp -pruv gpnorms.R spnorms.R fpnorms.R fpspnorms.R procmap.R runtime.R runtimes.R \
-		setup.html norms.html runtime.html runtimes.html $P
+		spdiff.R gpdiff.R surfdiff.R fpdiff.R sudiff.R setup.html norms.html runtime.html \
+		runtimes.html $P
 
 $B/norms.sh: norms.sh
 	sed -re "s:node=.+:node=$P:" norms.sh > $B/norms.sh
 	chmod a+x $B/norms.sh
+
+$B/normdiff.sh: normdiff.sh
+	sed -re "s:mitra=.+:mitra=$P:" normdiff.sh > $B/normdiff.sh
+	chmod a+x $B/normdiff.sh
 
 $B/setup.sh: setup.sh
 	sed -re "s:node=.+:node=$P:" setup.sh > $B/setup.sh
