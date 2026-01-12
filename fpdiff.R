@@ -90,7 +90,7 @@ for (j in seq(1,nvar,by=8)) {
 	if (max(nchar(noms))*length(noms) > 80) noms = abbreviate(noms,12)
 	if (max(nchar(noms)) > 11) {
 		fmt = "%12s"
-	if (max(nchar(noms)) > 9) {
+	} else if (max(nchar(noms)) > 9) {
 		fmt = "%10s"
 	} else if (max(nchar(noms)) > 7 || mnx) {
 		fmt = "%8s"
