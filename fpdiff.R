@@ -104,7 +104,7 @@ for (j in seq(1,nvar,by=8)) {
 
 	ndf = ndiff[,,,indv,drop=FALSE]
 
-	if (all(ndf == 0)) {
+	if (all(ndf == 0,na.rm=TRUE)) {
 		ind = seq(min(nt,5))
 	} else {
 		ind = seq(min(nt,15))
@@ -114,16 +114,28 @@ for (j in seq(1,nvar,by=8)) {
 		sdf = apply(ndf,c(1,4),function(x) paste(sprintf("%g",x[1,]),collapse="/"))
 		for (i in ind) cat(format(step1[i],width=5),sprintf(fmt,sdf[i,]),"\n")
 	} else {
-		for (i in ind) {
-			cat(format(step1[i],width=5),sprintf(fmt,ndf[i,1,1,]),"\n")
+		for (i in ind) cat(format(step1[i],width=5),sprintf(fmt,ndf[i,1,1,]),"\n")
+	}
+
+	if (all(ndf == 0,na.rm=TRUE)) {
+		if (nt > length(ind)) cat("...",nt-length(ind),"more 0 lines\n")
+	} else if (length(ind) > nt) {
+		if (nt > 30) {
+			cat("... (every",nt%/%30,"printed time-step)\n")
+			ind = seq(length(ind),nt,by=nt%/%30)[-1]
+		} else {
+			ind = seq(length(ind),nt)[-1]
+		}
+
+		if (mnx) {
+			for (i in ind) cat(format(step1[i],width=5),sprintf(fmt,sdf[i,]),"\n")
+		} else {
+			for (i in ind) cat(format(step1[i],width=5),sprintf(fmt,ndf[i,1,1,]),"\n")
 		}
 	}
 
-	if (all(ndf == 0)) {
-		if (nt > length(ind)) cat("...",nt-length(ind),"more 0 lines\n")
-	} else if (nt > 30) {
-		cat("... (every",nt%/%30,"printed time-step)\n")
-		ind = seq(length(ind),nt,by=nt%/%30)[-1]
-		for (i in ind) cat(format(step1[i],width=5),sprintf(fmt,ndf[i,1,1,]),"\n")
+	if (any(is.na(ndf))) {
+		ind = apply(ndf,4,function(x) any(is.na(x)))
+		cat("Warning: NA in variables",noms[ind],"\n")
 	}
 }

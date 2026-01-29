@@ -1,6 +1,8 @@
 library(mfnode)
 
-gpfre = sprintf("%s|DIV\\w*|VOR\\w*|E(TA)?DOT|PRESS\\. DEPARTURE|VERT\\. DIVERGENCE|TERM X",gpfre)
+gpfre = sprintf("%s|DIV\\w*|VOR\\w*|E(TA)?DOT",gpfre)
+gpfre = sprintf("%s|PRESS\\. DEPARTURE|VERT\\. DIVERGENCE|TERM X",gpfre)
+gpfre = sprintf("%s|\\w+_?NL",gpfre)
 
 gpnormerr = function(nd)
 {
@@ -201,7 +203,7 @@ for (j in seq(1,nvar,by=10)) {
 
 	cat(" step",sprintf(fmt,noms),"\n")
 	ndf = ndiff[,,,indv,drop=FALSE]
-	if (all(ndf == 0)) {
+	if (all(ndf == 0,na.rm=TRUE)) {
 		ind = seq(min(nt,5))
 	} else {
 		ind = seq(min(nt,15))
@@ -214,14 +216,26 @@ for (j in seq(1,nvar,by=10)) {
 		for (i in ind) cat(format(step1[i],width=5),sprintf(fmt,ndf[i,1,1,]),"\n")
 	}
 
-	if (all(ndiff == 0)) {
-		if (nt > 5) cat("...",nt-length(ind),"more 0 lines\n")
-	} else {
+	if (all(ndf == 0,na.rm=TRUE)) {
+		if (nt > length(ind)) cat("...",nt-length(ind),"more 0 lines\n")
+	} else if (length(ind) > nt) {
 		if (nt > 30) {
 			cat("... (every",nt%/%30,"printed time-step)\n")
 			ind = seq(length(ind),nt,by=nt%/%30)[-1]
+		} else {
+			ind = seq(length(ind),nt)[-1]
+		}
+
+		if (mnx) {
+			for (i in ind) cat(format(step1[i],width=5),sprintf(fmt,sdiff[i,]),"\n")
+		} else {
 			for (i in ind) cat(format(step1[i],width=5),sprintf(fmt,ndf[i,1,1,]),"\n")
 		}
+	}
+
+	if (any(is.na(ndf))) {
+		ind = apply(ndf,4,function(x) any(is.na(x)))
+		cat("Warning: NaN for variables",noms[ind],"\n")
 	}
 }
 

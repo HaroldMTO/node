@@ -83,18 +83,24 @@ nd = readLines(cargs$fic2,skipNul=TRUE)
 nd = grep("^ *$",nd,value=TRUE,invert=TRUE)
 surf2 = gpnorm2D(nd)
 
+if (length(surf1) == 0 || length(surf2) == 0) {
+	cat("--> no surface fields\n")
+	q("no")
+}
+
 mnx = "mnx" %in% names(cargs) && as.logical(cargs$mnx)
 
 noms1 = names(surf1)
 noms2 = names(surf2)
 indv = match(noms1,noms2)
-if (any(is.na(indv))) cat("missing clim variables in 2nd file :",noms1[is.na(indv)],"\n")
+if (any(is.na(indv))) cat("missing surf variables in 2nd file :",noms1[is.na(indv)],"\n")
 iv = which(noms2 %in% noms1)
-if (any(is.na(indv))) cat("new clim variables :",noms2[is.na(indv)],"\n")
+if (any(is.na(indv))) cat("new surf variables :",noms2[is.na(indv)],"\n")
 if (length(iv) == 0) {
 	cat("variables (1):",noms1,"\n")
 	cat("variables (2):",noms2,"\n")
-	stop("no clim variables in common to compare\n")
+	cat("no surf variables in common to compare\n")
+	q("no")
 }
 
 for (i in na.omit(indv)) {

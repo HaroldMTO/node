@@ -1,6 +1,6 @@
 #!/bin/sh
 
-mitra=~/mitraille
+node=~/util/node
 
 usage()
 {
@@ -132,7 +132,7 @@ fi
 
 if [ $setup -eq 1 ]
 then
-	R --slave -f $mitra/sudiff.R --args $fic1 $fic2
+	R --slave -f $node/sudiff.R --args $fic1 $fic2
 	exit
 fi
 
@@ -145,37 +145,37 @@ fi
 if [ $sp -eq 1 ]
 then
 	echo ". SP norms difference (up to 17):"
-	R --slave -f $mitra/spdiff.R --args fic1=$fic1 fic2=$fic2 "$spre"
+	R --slave -f $node/spdiff.R --args fic1=$fic1 fic2=$fic2 "$spre"
 fi
 
 if [ $gp -eq 1 ]
 then
 	echo ". GP norms difference (up to 17): $opt"
-	R --slave -f $mitra/gpdiff.R --args fic1=$fic1 fic2=$fic2 "$gpre" $opt
+	R --slave -f $node/gpdiff.R --args fic1=$fic1 fic2=$fic2 "$gpre" $opt
 
 	if [ -n "$gmvt1" ] && grep -qi "$gmvt1 cpglag" $fic1
 	then
 		echo ". GMV t1 norms difference (up to 17):"
-		R --slave -f $mitra/gpdiff.R --args fic1=$fic1 fic2=$fic2 re="$gmvt1 cpglag" $opt
+		R --slave -f $node/gpdiff.R --args fic1=$fic1 fic2=$fic2 re="$gmvt1 cpglag" $opt
 	elif [ -n "$gmvt1" ] && grep -qi "$gmvt1 slmf" $fic1
 	then
 		echo ". GMV t1 norms difference (up to 17):"
-		R --slave -f $mitra/gpdiff.R --args fic1=$fic1 fic2=$fic2 re="$gmvt1 slmf" $opt
+		R --slave -f $node/gpdiff.R --args fic1=$fic1 fic2=$fic2 re="$gmvt1 slmf" $opt
 	elif [ -n "$gmvt1" ] && grep -qi "$gmvt1 sl" $fic1
 	then
 		echo ". GP t1 norms difference (up to 17):"
-		R --slave -f $mitra/gpdiff.R --args fic1=$fic1 fic2=$fic2 re="$gmvt1 sl" $opt
+		R --slave -f $node/gpdiff.R --args fic1=$fic1 fic2=$fic2 re="$gmvt1 sl" $opt
 	fi
 fi
 
 if [ $fp -eq 1 ]
 then
 	echo ". FP norms difference (up to 17):"
-	R --slave -f $mitra/fpdiff.R --args fic1=$fic1 fic2=$fic2 $opt
+	R --slave -f $node/fpdiff.R --args fic1=$fic1 fic2=$fic2 $opt
 fi
 
 if [ $surf -eq 1 ]
 then
 	echo ". Surface GP norms difference (up to 17):"
-	R --slave -f $mitra/surfdiff.R --args fic1=$fic1 fic2=$fic2 $opt
+	R --slave -f $node/surfdiff.R --args fic1=$fic1 fic2=$fic2 $opt
 fi
