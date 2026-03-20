@@ -133,7 +133,7 @@ ropt=""
 
 R --slave -f $node/runtimes.R --args path=$path patt=$patt png=$png $ropt
 
-for pre in sp gp
+for pre in sp gp fp
 do
 	nc=0
 	echo "<tr>"
