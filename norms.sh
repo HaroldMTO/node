@@ -185,7 +185,7 @@ grep -q 'END CNT0' $fin || echo "Warning: no 'END CNT0', program may crash" >&2
 echo "SP norms for SPEC"
 spre=""
 st1="spnorm t1"
-echo $norms | grep -q spt1 && spre="$st1 *tr(ansdir)?:$st1 *si:$st1 spcm"
+echo $norms | grep -q spt1 && spre="$st1 *tr(ansdir)?:$st1 *(spc)?si:$st1 spcm"
 R --slave -f $node/spnorms.R --args $fin $fin2 lev=$lev $spref spre="$spre" png=$png $ropt
 
 if echo $norms | grep -q gfl

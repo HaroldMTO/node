@@ -232,6 +232,7 @@ gpl = gpl[! sapply(gpl,is.null)]
 
 gps = NULL
 if ("ref" %in% names(cargs)) {
+	cat("Load reference",cargs$ref,"\n")
 	load(cargs$ref)
 	dd1 = as.Date(as.character(getvar("NINDAT",nd)),"%Y%m%d")+getvar("NSSSSS",nd)/86400
 	ddt = as.numeric(dd-dd1,units="secs")
@@ -239,6 +240,7 @@ if ("ref" %in% names(cargs)) {
 	if (any(! is.na(indv))) {
 		gps = gps[,,,indv,drop=FALSE]
 	}	else {
+		cat("--> no variables in common\n")
 		gps = NULL
 	}
 }
@@ -332,13 +334,19 @@ if (length(lev) == 1) {
 	tfreq = xaxis$freq[iu]
 
 	ttime = times/tunit
-	if (! is.null(gps)) ddt = ddt/tunit
 
 	xlim = range(ttime)
 	if (length(hmin) == 1) xlim[1] = max(xlim[1],hmin*3600/tunit)
 	if (length(hmax) == 1) xlim[2] = min(xlim[2],hmax*3600/tunit)
 
-	it = which(ttime >= xlim[1] & ttime <= xlim[2])
+	if (! is.null(gps)) {
+		ddt = ddt/tunit
+		it = which(xlim[1] <= ddt & ddt <= xlim[2])
+		ddt = ddt[it]
+		gps = gps[it,,,,drop=FALSE]
+	}
+
+	it = which(xlim[1] <= ttime & ttime <= xlim[2])
 	ttime = ttime[it]
 	x = pretty(ttime[it]/tfreq,7)*tfreq
 	xaxp = c(range(x),length(x)-1)

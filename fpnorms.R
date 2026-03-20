@@ -294,6 +294,21 @@ vars:",head(fpnoms[-nv]),"...",fpnoms[nt],"\n")
 leg = leg[which(! sapply(fpl,is.null))]
 fpl = fpl[! sapply(fpl,is.null)]
 
+fps = NULL
+if ("ref" %in% names(cargs)) {
+   cat("Load reference",cargs$ref,"\n")
+   load(cargs$ref)
+   dd1 = as.Date(as.character(getvar("NINDAT",nd)),"%Y%m%d")+getvar("NSSSSS",nd)/86400
+   ddt = as.numeric(dd-dd1,units="secs")
+   indv = match(dimnames(gp1)[[4]],dimnames(fps)[[4]])
+   if (any(! is.na(indv))) {
+      fps = fps[,,,indv,drop=FALSE]
+   }  else {
+      cat("--> no variables in common\n")
+      fps = NULL
+   }
+}
+
 nf = length(fpnoms)
 nt = dim(fpl[[1]])[1]
 
@@ -388,7 +403,14 @@ if (length(lev) == 1) {
 	if (length(hmin) == 1) xlim[1] = max(xlim[1],hmin*3600/tunit)
 	if (length(hmax) == 1) xlim[2] = min(xlim[2],hmax*3600/tunit)
 
-	it = which(ttime >= xlim[1] & ttime <= xlim[2])
+	if (! is.null(gps)) {
+		ddt = ddt/tunit
+		it = which(xlim[1] <= ddt & ddt <= xlim[2])
+		ddt = ddt[it]
+		fps = fps[it,,,,drop=FALSE]
+	}
+
+	it = which(xlim[1] <= ttime & ttime <= xlim[2])
 	ttime = ttime[it]
 	x = pretty(ttime[it]/tfreq,7)*tfreq
 	xaxp = c(range(x),length(x)-1)
@@ -423,8 +445,17 @@ if (length(lev) == 1) {
 			il = which(apply(y,3,function(x) any(! is.na(x))))
 			scal = 1/scale10(y[,1,])
 			if (! is.finite(scal) || .001 <= scal && scal < 1) scal = 1
-			plotmean(ttime,y[,1,il],main=titre[j],leg[il],tunit,xlim=xlim,
+
+			ylim = NULL
+			if (! is.null(fps)) {
+				z = scal*fps[,1,1,j]
+				ylim = range(c(scal*y[,1,il],z),na.rm=TRUE)
+			}
+
+			plotmean(ttime,y[,1,il],main=titre[j],leg[il],tunit,xlim=xlim,ylim=ylim,
 				xlab=xlab,ylab=fpnoms[j],xaxp=xaxp,scale=scal,col=il)
+
+			if (! is.null(fps)) lines(ddt,z,col="grey",lty=5)
 
 			plotmnx(ttime,y,titre[j],xlim=xlim,xlab=xlab,ylab=fpnoms[j],xaxp=xaxp)
 

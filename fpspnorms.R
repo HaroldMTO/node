@@ -95,6 +95,7 @@ nstop = getvar("NSTOP",nd)
 if (interactive()) browser()
 
 cat("Parse FP norms of type",ptype,"\n")
+nd = sub("\\<Savg(\\w+)","S000\\1",nd)
 fp1 = fpspnorm(nd,lev)
 
 if (is.null(fp1)) {
