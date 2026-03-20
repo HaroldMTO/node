@@ -15,21 +15,29 @@ getgem = function(nd)
 longend = function(nd,ndglg)
 {
 	ij = grep("\\( *JGL,NLOENG *\\)",nd)
-	if (length(ij) == 0) {
-		ij = grep("\\( *JGL,NLOENG,NMENG *\\)",nd)
-		if (length(ij) == 0) return(NULL)
-
-		is = grep("\\(JM,NDGLU\\)",nd)
-		if (length(ij) > 1) ij = max(ij[ij < max(is)])
-		ind = seq(ij+1,is-1)
-		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
-		nloeng = as.integer(gsub("\\( *-?\\d+ +(\\d+) +\\d+\\)","\\1",s))
-	} else {
+	if (length(ij) > 0) {
 		is = grep("Set up transforms",nd)
 		is = is[is > ij]
 		ind = seq(ij+1,is[1]-1)
 		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+\\)",nd[ind])))
 		nloeng = as.integer(gsub("\\( *-?\\d+ +(\\d+)\\)","\\1",s))
+	}
+
+	ij = grep("\\( *JGL,NLOENG,NMENG *\\)",nd)
+	if (length(ij) > 0) {
+		is = grep("\\(JM,NDGLU\\)",nd)
+		if (length(ij) > 1) ij = max(ij[ij < max(is)])
+		ind = seq(ij+1,is-1)
+		s = unlist(regmatches(nd[ind],gregexpr("\\( *-?\\d+ +\\d+ +\\d+\\)",nd[ind])))
+		nloeng = as.integer(gsub("\\( *-?\\d+ +(\\d+) +\\d+\\)","\\1",s))
+	}
+
+	ij = grep("NLOENG.*:",nd)
+	if (length(ij) > 0) {
+		is = grep("Set grid-point partitioning",nd)
+		if (length(ij) > 1) ij = max(ij[ij < max(is)])
+		ind = seq(ij+1,is-1)
+		nloeng = intlines(nd[ind])
 	}
 
    stopifnot(length(nloeng)%%2 == 0)
@@ -926,7 +934,7 @@ cat("Grid-point mapping wrt MPI tasks\n")
 ndim = c(nproc,nprgpns,ndglg,ndlon,min(ngptot),max(ngptot))
 cat("Values from log file (nproc/nprgpns/ndglg/ndlon/ngptot/ngptotg):\n",ndim,"\n")
 
-s = grep("SETA=.+ LAT=.+ NSTA=",nd,value=TRUE)
+s = grep("SETA=.+ LAT=.+ (D%)?NSTA=",nd,value=TRUE)
 if (length(s) > 0) {
 	sta = procmap(s)
 	s = grep("SETA=.+ LAT=.+ (D%)?NONL=",nd,value=TRUE)
