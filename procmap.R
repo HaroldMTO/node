@@ -71,7 +71,13 @@ wavend = function(nd,ndglg)
 	ij = grep("^ *(G\\w*%NMEN|NMENG\\>)",nd)
 	if (length(ij) > 0) {
 		is = grep("G%NDGLU|NMEN:",nd,ignore.case=TRUE)
-		if (length(ij) > 1) ij = max(ij[ij < max(is)])
+		if (ij[1] < is[1]) {
+			ij = ij[1]
+			is = is[1]
+		} else if (length(ij) > 1) {
+			ij = max(ij[ij < max(is)])
+		}
+
 		is = is[is > ij]
 		ind = seq(ij+1,is[1]-1)
 		nmeng = intlines(nd[ind])
@@ -965,16 +971,16 @@ SL comms for MPI task",sub(" *MYPROC += +(\\d+).*","\\1",nd[ip[1]]),":",icomm,"\
 		file=sprintf("%s/out.txt",cargs$png))
 }
 
-cat("Vertical mesoscale drag\n")
+cat("Vertical mesospheric drag\n")
 gwd = mesodrag(nd,nflevg)
 if (! is.null(gwd)) {
 	png(sprintf("%s/mesodrag.png",cargs$png))
 	par(mfrow=c(1,2),mar=c(3,3,3,2)+.1,mgp=c(2,.75,0))
 	ylim = c(nflevg,1)
-	plot(gwd$u,1:nflevg,type="o",lty=1,pch="-",main="Mesoscale drag",
+	plot(gwd$u,1:nflevg,type="o",lty=1,pch="-",main="Mesospheric drag",
 		xlab="Wind speed",ylab="Level",ylim=ylim,cex=1.5)
 	abline(v=0,col="grey")
-	plot(gwd$t,1:nflevg,type="o",lty=1,pch="-",main="Mesoscale drag",
+	plot(gwd$t,1:nflevg,type="o",lty=1,pch="-",main="Mesospheric drag",
 		xlab="Temperature",ylab="Level",ylim=ylim,cex=1.5)
 	abline(v=0,col="grey")
 	dev.off()

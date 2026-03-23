@@ -25,6 +25,9 @@ augmentlev = function(fp,nlev,ind)
 }
 
 args = commandArgs(trailingOnly=TRUE)
+largs = strsplit(args,split="=")
+cargs = lapply(largs,function(x) unlist(strsplit(x[-1],split=":")))
+names(cargs) = sapply(largs,function(x) x[1])
 
 hasx11 = is.null(getarg("png",args)) && capabilities("X11")
 ask = hasx11 && interactive()
