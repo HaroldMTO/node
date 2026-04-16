@@ -397,6 +397,48 @@ jberr = function(nd,nflevg)
 	jb[,i0]
 }
 
+astro = function(nd)
+{
+	ind = grep("RDEASO",nd)
+	if (length(ind) == 0) return(NULL)
+
+	istep = as.integer(sub("^ *ISTEP *= *([0-9]+).+","\\1",nd[ind]))
+
+	# account for stepx and PC scheme
+	if (istep[1] == istep[2]) {
+		ind = ind[-1]
+		istep = istep[-1]
+	}
+
+	# account for PC scheme or any other repeating
+	ind = ind[! duplicated(istep)]
+
+	ast = matrix(numlines(nd[ind]),ncol=4,byrow=TRUE,
+		dimnames=list(istep,c("ZI0","ZSEASON","REA","RDEASO")))
+
+	indi = grep("\\<RIP0\\>",nd)
+	indi = indi[which(sapply(indi,function(i) min(abs(i-ind)) < 5))]
+	if (length(indi) > 0) {
+		ri0 = matrix(numlines(nd[indi]),ncol=4,byrow=TRUE,
+			dimnames=list(istep,c("RSOLINC","RI0","ZI0","RIP0")))
+		ast = cbind(ast,ri0)
+	}
+
+	ast
+}
+
+conserv = function(nd)
+{
+	ind = grep("conservini",nd)
+	if (length(ind) == 0) return(NULL)
+
+	ind = grep("former dry masses",nd)
+	if (length(ind) == 0) return(NULL)
+
+	m = matrix(numlines(nd[ind]),ncol=3,byrow=TRUE)
+	c(m[1,2],m[,1])
+}
+
 args = commandArgs(trailingOnly=TRUE)
 largs = strsplit(args,split="=")
 cargs = lapply(largs,function(x) unlist(strsplit(x[-1],split=":")))
@@ -716,6 +758,34 @@ if (! is.null(lh)) {
 	cat(format(c("Statistics","Level","Mean","Std-dev."),width=15),"\n",file=con)
 	write.table(format(df,width=15),con,quote=FALSE,col.names=FALSE)
 	close(con)
+}
+
+cat("Astronomic information\n")
+ast = astro(nd)
+if (! is.null(ast)) {
+	tstep = as.integer(dimnames(ast)[[1]])
+	png(sprintf("%s/astro.png",cargs$png))
+	par(mfrow=c(3,1))
+	plot(tstep,ast[,"RIP0"],type="l",main="Solar constant (RIP0)",xlab="Time-step",
+		ylab="Power (W/m^2)")
+	plot(tstep,ast[,"ZSEASON"],type="l",
+		main="Deviation from mean Earth-Sun distance (ZSEASON)",xlab="Time-step",
+		ylab="Deviation")
+	plot(tstep,ast[,"RDEASO"]/1000,type="l",main="Earth-Sun distance (RDEASO)",
+		xlab="Time-step",ylab="Distance (km)")
+	dev.off()
+}
+
+cat("Conservation information\n")
+mass = conserv(nd)
+if (! is.null(mass)) {
+	tstep = seq(0,along=mass)
+	tt = "Dry mass of the atmosphere"
+	v = paste(sprintf("%+.3g%%",100*(range(mass)/mass[1]-1)),collapse=" ... ")
+	tt[2] = paste("Relative variation:",v)
+	png(sprintf("%s/mass.png",cargs$png))
+	plot(tstep,mass,type="l",main=tt,xlab="Time-step",ylab="Mass (?)")
+	dev.off()
 }
 
 cat("Run-time information\n")

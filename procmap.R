@@ -469,6 +469,24 @@ plotmap = function(sta,onl)
 	c(length(procs),length(sta),nlat,nlon,ngp1,ngp)
 }
 
+alat = function(nd,re,rend)
+{
+	ij = grep(re,nd)
+	if (length(ij) == 0) return(NULL)
+
+	is = grep(rend,nd)
+	if (ij[1] < is[1]) {
+		ij = ij[1]
+		is = is[1]
+	} else if (length(ij) > 1) {
+		ij = ij[ij < max(is)]
+	}
+
+	is = is[which.min(is > ij)]
+	lat = intlines(nd[seq(ij+1,is-1)])
+	lat
+}
+
 equilon = function(ndgnh,ndlon,nadd=0)
 {
 	lats = 90*(1-(seq(ndgnh)-.5)/ndgnh)
@@ -953,22 +971,59 @@ if (length(s) > 0) {
 	if (any(ncomp != ndim)) cat("--> computed values differ from log file:\n",ncomp,"\n")
 }
 
+lat1 = alat(nd,"NFRSTLAT","NLSTLAT")
+latn = alat(nd,"NLSTLAT","NFRSTLOFF")
+stopifnot(length(lat1) == length(latn))
+nlata = latn-lat1
+nah = (length(lat1)+1)%/%2
+nb = sapply(sta,dim)[2,]
+nlong2 = c(nlong,rev(nlong))
+ngp1 = nlong2[lat1]/nb
+ngpn = nlong2[latn]/nb
+ratio = c(ngp1[1:nah]/ngpn[1:nah],ngpn[-(1:nah)]/ngp1[-(1:nah)])
+cat("Rectangularity:",round(ratio*100),"\n")
+
 cat("SL scheme information\n")
 if (any(regexpr("LSLAG *= *T(RUE)?",nd) > 0)) {
 	ngp = min(ngptot)
 	naslb1 = getvar("\\w.+ YDSL%NASLB1",nd)
-	nslrpt = getvar("SLRSET: +NSLRPT",nd)
-	nslspt = getvar("SLRSET: +NSLSPT",nd)
+	nslrpt = getvar("(?:SLRSET: +)?NSLRPT",nd)
+	nslspt = getvar("(?:SLRSET: +)?NSLSPT",nd)
 	islwide = getvar("ISLWIDE",nd)
-	isl = grep("NSLCOMM",nd,ignore.case=TRUE)
-	icomm = as.integer(strsplit(gsub("^ +","",nd[isl+1])," +")[[1]])
+	isl = grep("NSLCOMM *= *$",nd,ignore.case=TRUE)
+	if (length(isl) == 0) {
+		isl = grep("NSLCOMM *=",nd,ignore.case=TRUE)
+		icomm = intlines(nd[isl])
+	} else {
+		icomm = as.integer(strsplit(gsub("^ +","",nd[isl])," +")[[1]])
+	}
 	ip = grep("MYPROC",nd,ignore.case=TRUE)
 	cat("SL halo comms (send/recv):",nslspt,"/",nslrpt,"points
 SL total size (naslb1):",naslb1,"points
 SL halo width:",islwide,"lats and longs
 Core ratio in SL:",round(ngp/naslb1,3)*100,"%
-SL comms for MPI task",sub(" *MYPROC += +(\\d+).*","\\1",nd[ip[1]]),":",icomm,"\n",
+SL comms for MPI task",sub(" *MYPROC *= *(\\d+).*","\\1",nd[ip[1]]),":",icomm,"\n",
 		file=sprintf("%s/out.txt",cargs$png))
+
+	ind = integer()
+	if (file.exists("mpi.out")) {
+		ndout = readLines("mpi.out")
+		ind = grep("NASLB1/NASLB1_TRUE",ndout,ignore.case=TRUE)
+	}
+	if (length(ind) > 0) {
+		nasl = unname(sapply(ndout[ind],intlines))[2,]
+		cat("SL core ratio:\n")
+		print(summary(100*ngp/nasl))
+		ind = grep("NSLCOMM",ndout,ignore.case=TRUE)
+		slcomm = lapply(ndout[ind],intlines)
+		nprcomm = sapply(slcomm,length)
+
+		ind = grep("NSLRPT/NSLSPT",ndout,ignore.case=TRUE)
+		ngpcomm = unname(sapply(ndout[ind],intlines))
+		nptcomm = colSums(ngpcomm)
+		cat("SL points to comm':\n")
+		print(summary(nptcomm))
+	}
 }
 
 cat("Vertical mesospheric drag\n")
