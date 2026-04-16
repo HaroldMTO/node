@@ -216,7 +216,8 @@ then
 	if [ -z "$fin2" ]
 	then
 		echo "GP norms for GMV+SPEC"
-		R --slave -f $node/gpnorms.R --args $fin lev=$lev type=gmvspec$suf png=$png $ropt
+		R --slave -f $node/gpnorms.R --args $fin lev=$lev type=gmvspec$suf \
+			gpref="gpnorm gmvt0" png=$png $ropt
 	fi
 fi
 
@@ -274,7 +275,7 @@ then
 fi
 
 for pre in sp gpgmv$suf gpgfl$suf gpadiab$suf gpsi$suf gpb1$suf fp$suf fpsp \
-	gflspec$suf fpgp$suf fpspec
+	gflspec$suf gmvspec$suf fpgp$suf fpspec
 do
 	echo "HTML files for $pre"
 	{
@@ -318,4 +319,5 @@ sed -re "s:TAG NODE:$fin:" -e "s:TAG BASE:$base:" \
 	-e "/TAG GPSI/r $temp/gpsi$suf.html" -e "/TAG GPB1/r $temp/gpb1.html" \
 	-e "/TAG GFLSPEC/r $temp/gflspec$suf.html" -e "/TAG FPOS/r $temp/fp$suf.html" \
 	-e "/TAG SPFPOS/r $temp/fpsp.html" -e "/TAG SPECFPOS/r $temp/fpspec.html" \
-	-e "/TAG GPFPOS/r $temp/fpgp$suf.html" $node/norms.html > $fout
+	-e "/TAG GPFPOS/r $temp/fpgp$suf.html" -e "/TAG GMVSPEC/r $temp/gmvspec$suf.html" \
+	$node/norms.html > $fout

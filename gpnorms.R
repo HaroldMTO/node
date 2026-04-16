@@ -146,8 +146,13 @@ if (is.null(gpre) && length(fnode) == 1) {
 	cat("Select times and variables among:
 times:",head(times[-nt]),"...",times[nt],"
 vars:",head(gpnoms[-nv]),"...",gpnoms[nv],"\n")
-	sp1 = spnorm(nd,lev,abbrev=FALSE)
+	sp1 = spnorm(nd,lev)
 	if (! is.null(sp1)) {
+		# some small fix for different names (but same variable)
+		spnoms = dimnames(sp1)[[3]]
+		ind = match("SP",spnoms)
+		if (! is.na(ind)) dimnames(sp1)[[3]][ind] = "SURF P"
+
 		indt = match(step,dimnames(sp1)[[1]])
 		indv = match(gpnoms,dimnames(sp1)[[3]])
 		if (any(! is.na(indt)) && any(! is.na(indv))) {
