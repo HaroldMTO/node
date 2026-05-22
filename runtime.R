@@ -785,6 +785,7 @@ if (! is.null(mass)) {
 	tt[2] = paste("Relative variation:",v)
 	png(sprintf("%s/mass.png",cargs$png))
 	plot(tstep,mass,type="l",main=tt,xlab="Time-step",ylab="Mass (?)")
+	abline(h=mass[1],col="grey",lty=2)
 	dev.off()
 }
 
